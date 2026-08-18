@@ -42,6 +42,9 @@ public class RuleCache {
     @Column(name = "rule_description", nullable = false, columnDefinition = "TEXT")
     private String ruleDescription;
 
+    @Column(name = "rule_expression", columnDefinition = "TEXT")
+    private String ruleExpression;
+
     @Column(name = "category_name", nullable = false)
     private String categoryName;
 

@@ -124,6 +124,7 @@ public class RuleCacheServiceImpl implements RuleCacheService {
                         ? ""
                         : activeRule.getRuleDescription()
         );
+        ruleCache.setRuleExpression(activeRule.getRuleExpression());
         ruleCache.setCategoryName(activeRule.getCategoryName());
         ruleCache.setRuleScore(activeRule.getRuleScore());
         ruleCache.setStatus(true);
@@ -212,6 +213,7 @@ public class RuleCacheServiceImpl implements RuleCacheService {
                 ruleCache.getRuleCode(),
                 ruleCache.getRuleName(),
                 ruleCache.getRuleDescription(),
+                ruleCache.getRuleExpression(),
                 ruleCache.getCategoryName(),
                 ruleCache.getRuleScore(),
                 ruleCache.getStatus(),

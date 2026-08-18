@@ -1,0 +1,12 @@
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\exception\GlobalExceptionHandler.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\dto\FraudEvaluationRequest.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\client\RuleCacheClient.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\client\DecisionClient.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\service\impl\FraudEvaluationServiceImpl.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\producer\FraudEventProducer.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\dto\FraudEvaluationResponse.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\client\ScoringClient.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\FraudEngineServiceApplication.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\dto\FraudEvent.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\controller\FraudEvaluationController.java
+D:\Backend-Frms\se-frms-microservices\fraud-engine-service\src\main\java\com\se\frms\fraudengine\service\FraudEvaluationService.java

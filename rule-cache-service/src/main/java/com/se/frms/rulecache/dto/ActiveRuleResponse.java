@@ -10,6 +10,7 @@ public record ActiveRuleResponse(
         String ruleCode,
         String ruleName,
         String ruleDescription,
+        String ruleExpression,
         String categoryName,
         Integer ruleScore,
         Boolean status,

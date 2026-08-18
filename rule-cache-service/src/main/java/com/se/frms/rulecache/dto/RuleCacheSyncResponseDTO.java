@@ -19,6 +19,8 @@ public class RuleCacheSyncResponseDTO {
 
     private String ruleDescription;
 
+    private String ruleExpression;
+
     private String categoryName;
 
     private Integer ruleScore;
