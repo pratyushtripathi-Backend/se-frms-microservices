@@ -4,6 +4,7 @@ D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\f
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\dto\TransactionResponse.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\dto\FraudEvaluationResponse.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\dto\FraudEvaluationRequest.java
+D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\service\TransactionEvaluationService.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\repository\TransactionRepository.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\service\impl\TransactionServiceImpl.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\dto\ErrorResponse.java
@@ -11,6 +12,7 @@ D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\f
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\entity\TransactionMaster.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\dto\TransactionDetailsResponse.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\exception\FraudEngineException.java
+D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\service\DuplicateFraudNotificationService.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\client\FraudEngineClient.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\service\TransactionService.java
 D:\Backend-Frms\se-frms-microservices\transaction-service\src\main\java\com\se\frms\transaction\exception\ResourceNotFoundException.java

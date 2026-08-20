@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record DecisionRequest(
         UUID transactionId,
+        UUID scoringId,
         Integer totalRiskScore,
         Map<String, Object> transactionData
 ) {

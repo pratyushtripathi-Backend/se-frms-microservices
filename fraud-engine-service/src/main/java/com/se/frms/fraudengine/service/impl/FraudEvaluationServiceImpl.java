@@ -1,7 +1,7 @@
 package com.se.frms.fraudengine.service.impl;
 
 import com.se.frms.fraudengine.client.DecisionClient;
-import com.se.frms.fraudengine.client.RuleCacheClient;
+import com.se.frms.fraudengine.cache.ActiveRuleCache;
 import com.se.frms.fraudengine.client.ScoringClient;
 import com.se.frms.fraudengine.dto.ActiveRuleResponse;
 import com.se.frms.fraudengine.dto.DecisionRequest;
@@ -28,7 +28,7 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
     private static final String DUPLICATE_FRAUD = "DUPLICATE_FRAUD";
     private static final String REVIEW = "REVIEW";
 
-    private final RuleCacheClient ruleCacheClient;
+    private final ActiveRuleCache activeRuleCache;
     private final ScoringClient scoringClient;
     private final DecisionClient decisionClient;
     private final FraudEventProducer fraudEventProducer;
@@ -45,12 +45,13 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
                     100,
                     "Duplicate idempotent transaction reported by Transaction Service"
             );
-            publishFraudEvent(request, response, null, Map.of("duplicate", true));
+            publishFraudEvent(request, response, null, null, Map.of("duplicate", true));
             log.info("Fraud evaluation completed as duplicate transactionId={}, elapsedMs={}", request.transactionId(), elapsedMillis(startedAt));
             return response;
         }
 
-        List<ActiveRuleResponse> activeRules = ruleCacheClient.getActiveRules();
+        List<ActiveRuleResponse> activeRules = activeRuleCache.getActiveRules();
+        log.info("Using active rule cache transactionId={}, ruleCount={}", request.transactionId(), activeRules.size());
         ScoringResponse scoringResponse = scoringClient.score(new ScoringRequest(
                 request.transactionId(),
                 activeRules,
@@ -60,6 +61,7 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
         Integer totalRiskScore = scoringResponse != null ? scoringResponse.totalRiskScore() : 0;
         DecisionResponse decisionResponse = decisionClient.decide(new DecisionRequest(
                 request.transactionId(),
+                scoringResponse != null ? scoringResponse.scoringId() : null,
                 totalRiskScore,
                 request.transactionData()
         ));
@@ -81,6 +83,7 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
                 request,
                 response,
                 scoringResponse != null ? scoringResponse.scoringId() : null,
+                decisionResponse != null ? decisionResponse.decisionId() : null,
                 scoringResponse != null && scoringResponse.triggeredRules() != null
                         ? scoringResponse.triggeredRules()
                         : Map.of()
@@ -105,12 +108,13 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
             FraudEvaluationRequest request,
             FraudEvaluationResponse response,
             java.util.UUID scoringId,
+            java.util.UUID decisionId,
             Map<String, Object> triggeredRules
     ) {
         fraudEventProducer.publish(new FraudEvent(
                 request.transactionId(),
                 scoringId,
-                null,
+                decisionId,
                 response.totalRiskScore(),
                 response.finalDecision(),
                 request.transactionData(),

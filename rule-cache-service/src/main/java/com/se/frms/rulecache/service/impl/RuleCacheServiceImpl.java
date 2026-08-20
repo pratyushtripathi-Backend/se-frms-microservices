@@ -4,8 +4,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.se.frms.rulecache.client.MonolithRuleClient;
 import com.se.frms.rulecache.dto.ActiveRuleResponse;
+import com.se.frms.rulecache.dto.DecisionPolicyCacheResponse;
+import com.se.frms.rulecache.dto.DecisionPolicyCacheSyncResponseDTO;
 import com.se.frms.rulecache.dto.RuleCacheSyncResponseDTO;
+import com.se.frms.rulecache.entity.DecisionPolicyCache;
 import com.se.frms.rulecache.entity.RuleCache;
+import com.se.frms.rulecache.repository.DecisionPolicyCacheRepository;
 import com.se.frms.rulecache.repository.RuleCacheRepository;
 import com.se.frms.rulecache.service.RuleCacheService;
 
@@ -29,6 +33,8 @@ public class RuleCacheServiceImpl implements RuleCacheService {
 
     private final RuleCacheRepository ruleCacheRepository;
 
+    private final DecisionPolicyCacheRepository decisionPolicyCacheRepository;
+
     private final MonolithRuleClient monolithRuleClient;
 
     private final StringRedisTemplate stringRedisTemplate;
@@ -37,6 +43,9 @@ public class RuleCacheServiceImpl implements RuleCacheService {
 
     @Value("${rule-cache.redis.active-rules-key:frms:rule-cache:active-rules}")
     private String activeRulesCacheKey;
+
+    @Value("${rule-cache.redis.active-decision-policy-key:frms:rule-cache:active-decision-policy}")
+    private String activeDecisionPolicyCacheKey;
 
     @Value("${rule-cache.redis.ttl-minutes:10}")
     private Long redisTtlMinutes;
@@ -63,6 +72,28 @@ public class RuleCacheServiceImpl implements RuleCacheService {
         log.info("Active rules fetched from database and saved to Redis");
 
         return dbRules;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DecisionPolicyCacheResponse getActiveDecisionPolicy() {
+
+        DecisionPolicyCacheResponse redisPolicy =
+                getActiveDecisionPolicyFromRedis();
+
+        if (redisPolicy != null) {
+            log.info("Active decision policy fetched from Redis cache");
+            return redisPolicy;
+        }
+
+        DecisionPolicyCacheResponse dbPolicy =
+                getActiveDecisionPolicyFromDatabase();
+
+        saveActiveDecisionPolicyToRedis(dbPolicy);
+
+        log.info("Active decision policy fetched from database and saved to Redis");
+
+        return dbPolicy;
     }
 
     @Override
@@ -100,9 +131,18 @@ public class RuleCacheServiceImpl implements RuleCacheService {
 
         saveActiveRulesToRedis(latestActiveRules);
 
+        DecisionPolicyCacheSyncResponseDTO activeDecisionPolicy =
+                monolithRuleClient.fetchActiveDecisionPolicy();
+
+        if (activeDecisionPolicy != null) {
+            upsertDecisionPolicy(activeDecisionPolicy);
+            saveActiveDecisionPolicyToRedis(getActiveDecisionPolicyFromDatabase());
+        }
+
         log.info(
-                "Rule cache sync completed, activeRuleCount={}",
-                activeRules.size()
+                "Rule cache sync completed, activeRuleCount={}, decisionPolicyId={}",
+                activeRules.size(),
+                activeDecisionPolicy != null ? activeDecisionPolicy.getPolicyId() : null
         );
     }
 
@@ -135,6 +175,35 @@ public class RuleCacheServiceImpl implements RuleCacheService {
         );
 
         ruleCacheRepository.save(ruleCache);
+    }
+
+    private void upsertDecisionPolicy(
+            DecisionPolicyCacheSyncResponseDTO activeDecisionPolicy
+    ) {
+
+        DecisionPolicyCache decisionPolicyCache =
+                decisionPolicyCacheRepository
+                        .findByPolicyId(activeDecisionPolicy.getPolicyId())
+                        .orElseGet(DecisionPolicyCache::new);
+
+        decisionPolicyCache.setPolicyId(activeDecisionPolicy.getPolicyId());
+        decisionPolicyCache.setDescription(activeDecisionPolicy.getDescription());
+        decisionPolicyCache.setAllowMinScore(activeDecisionPolicy.getAllowMinScore());
+        decisionPolicyCache.setAllowMaxScore(activeDecisionPolicy.getAllowMaxScore());
+        decisionPolicyCache.setReviewMinScore(activeDecisionPolicy.getReviewMinScore());
+        decisionPolicyCache.setReviewMaxScore(activeDecisionPolicy.getReviewMaxScore());
+        decisionPolicyCache.setBlockMinScore(activeDecisionPolicy.getBlockMinScore());
+        decisionPolicyCache.setBlockMaxScore(activeDecisionPolicy.getBlockMaxScore());
+        decisionPolicyCache.setStatus(Boolean.TRUE.equals(activeDecisionPolicy.getStatus()));
+        decisionPolicyCache.setCreatedBy(
+                activeDecisionPolicy.getCreatedBy() == null
+                        ? "SYSTEM"
+                        : activeDecisionPolicy.getCreatedBy()
+        );
+        decisionPolicyCache.setCreatedAt(activeDecisionPolicy.getCreatedAt());
+        decisionPolicyCache.setUpdatedAt(activeDecisionPolicy.getUpdatedAt());
+
+        decisionPolicyCacheRepository.save(decisionPolicyCache);
     }
 
     private List<ActiveRuleResponse> getActiveRulesFromDatabase() {
@@ -176,6 +245,43 @@ public class RuleCacheServiceImpl implements RuleCacheService {
         }
     }
 
+    private DecisionPolicyCacheResponse getActiveDecisionPolicyFromDatabase() {
+
+        return decisionPolicyCacheRepository
+                .findFirstByStatusTrueOrderByUpdatedAtDesc()
+                .map(this::mapToDecisionPolicyResponse)
+                .orElse(null);
+    }
+
+    private DecisionPolicyCacheResponse getActiveDecisionPolicyFromRedis() {
+
+        try {
+
+            String cachedPolicy =
+                    stringRedisTemplate
+                            .opsForValue()
+                            .get(activeDecisionPolicyCacheKey);
+
+            if (cachedPolicy == null || cachedPolicy.isBlank()) {
+                return null;
+            }
+
+            return objectMapper.readValue(
+                    cachedPolicy,
+                    DecisionPolicyCacheResponse.class
+            );
+
+        } catch (Exception ex) {
+
+            log.warn(
+                    "Failed to read active decision policy from Redis: {}",
+                    ex.getMessage()
+            );
+
+            return null;
+        }
+    }
+
     private void saveActiveRulesToRedis(
             List<ActiveRuleResponse> activeRules
     ) {
@@ -202,6 +308,36 @@ public class RuleCacheServiceImpl implements RuleCacheService {
         }
     }
 
+    private void saveActiveDecisionPolicyToRedis(
+            DecisionPolicyCacheResponse activeDecisionPolicy
+    ) {
+
+        if (activeDecisionPolicy == null) {
+            return;
+        }
+
+        try {
+
+            String policyJson =
+                    objectMapper.writeValueAsString(activeDecisionPolicy);
+
+            stringRedisTemplate
+                    .opsForValue()
+                    .set(
+                            activeDecisionPolicyCacheKey,
+                            policyJson,
+                            Duration.ofMinutes(redisTtlMinutes)
+                    );
+
+        } catch (Exception ex) {
+
+            log.warn(
+                    "Failed to save active decision policy to Redis: {}",
+                    ex.getMessage()
+            );
+        }
+    }
+
     private ActiveRuleResponse mapToResponse(
             RuleCache ruleCache
     ) {
@@ -220,6 +356,27 @@ public class RuleCacheServiceImpl implements RuleCacheService {
                 ruleCache.getCreatedBy(),
                 ruleCache.getCreatedDate(),
                 ruleCache.getUpdatedAt()
+        );
+    }
+
+    private DecisionPolicyCacheResponse mapToDecisionPolicyResponse(
+            DecisionPolicyCache decisionPolicyCache
+    ) {
+
+        return new DecisionPolicyCacheResponse(
+                decisionPolicyCache.getId(),
+                decisionPolicyCache.getPolicyId(),
+                decisionPolicyCache.getDescription(),
+                decisionPolicyCache.getAllowMinScore(),
+                decisionPolicyCache.getAllowMaxScore(),
+                decisionPolicyCache.getReviewMinScore(),
+                decisionPolicyCache.getReviewMaxScore(),
+                decisionPolicyCache.getBlockMinScore(),
+                decisionPolicyCache.getBlockMaxScore(),
+                decisionPolicyCache.getStatus(),
+                decisionPolicyCache.getCreatedBy(),
+                decisionPolicyCache.getCreatedAt(),
+                decisionPolicyCache.getUpdatedAt()
         );
     }
 }

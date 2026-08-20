@@ -154,6 +154,7 @@ public class TransactionServiceImpl implements TransactionService {
         transaction.setTransactionType(resolveString(request.transactionType(), data, "transactionType", "transaction_type"));
         transaction.setCurrency(resolveString(request.currency(), data, "currency"));
         transaction.setAmount(resolveBigDecimal(request.amount(), data, "amount"));
+        enrichTransactionData(transaction, data);
         transaction.setDuplicateTransaction(false);
         transaction.setTransactionData(data);
         transaction.setRemarks(request.remarks());
@@ -162,6 +163,25 @@ public class TransactionServiceImpl implements TransactionService {
         transaction.setCreatedDate(now);
         transaction.setUpdatedAt(now);
         return transaction;
+    }
+
+    private void enrichTransactionData(TransactionMaster transaction, Map<String, Object> data) {
+        putIfPresent(data, "externalTransactionId", transaction.getExternalTransactionId());
+        putIfPresent(data, "ipAddress", transaction.getIpAddress());
+        putIfPresent(data, "latitude", transaction.getLatitude());
+        putIfPresent(data, "longitude", transaction.getLongitude());
+        putIfPresent(data, "merchantId", transaction.getMerchantId());
+        putIfPresent(data, "userId", transaction.getUserId());
+        putIfPresent(data, "channel", transaction.getChannel());
+        putIfPresent(data, "transactionType", transaction.getTransactionType());
+        putIfPresent(data, "currency", transaction.getCurrency());
+        putIfPresent(data, "amount", transaction.getAmount());
+    }
+
+    private void putIfPresent(Map<String, Object> data, String key, Object value) {
+        if (value != null) {
+            data.putIfAbsent(key, value);
+        }
     }
 
     private void markAsDuplicateFraud(TransactionMaster transaction, TransactionMaster original) {

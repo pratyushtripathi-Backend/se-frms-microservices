@@ -6,6 +6,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -16,7 +17,10 @@ import org.springframework.web.client.RestClientException;
 @Slf4j
 public class RuleCacheClient {
 
+    @Qualifier("restClientBuilder")
     private final RestClient.Builder restClientBuilder;
+    @Qualifier("directRestClientBuilder")
+    private final RestClient.Builder directRestClientBuilder;
 
     @Value("${frms.rule-cache.base-url}")
     private String ruleCacheBaseUrl;
@@ -27,7 +31,7 @@ public class RuleCacheClient {
     public List<ActiveRuleResponse> getActiveRules() {
         log.info("Fetching active rules from Rule Cache");
         try {
-            List<ActiveRuleResponse> rules = restClientBuilder.build()
+            List<ActiveRuleResponse> rules = restClientBuilder().build()
                     .get()
                     .uri(ruleCacheBaseUrl + activeRulesPath)
                     .retrieve()
@@ -39,5 +43,13 @@ public class RuleCacheClient {
             log.error("Rule Cache call failed", ex);
             throw new ExternalServiceException("Unable to fetch active rules from Rule Cache", ex);
         }
+    }
+
+    private RestClient.Builder restClientBuilder() {
+        return isLocalUrl(ruleCacheBaseUrl) ? directRestClientBuilder : restClientBuilder;
+    }
+
+    private boolean isLocalUrl(String url) {
+        return url != null && (url.contains("localhost") || url.contains("127.0.0.1"));
     }
 }

@@ -1,6 +1,7 @@
 package com.se.frms.rulecache.controller;
 
 import com.se.frms.rulecache.dto.ActiveRuleResponse;
+import com.se.frms.rulecache.dto.DecisionPolicyCacheResponse;
 import com.se.frms.rulecache.service.RuleCacheService;
 
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,11 @@ public class RuleCacheController {
     @GetMapping("/active")
     public ResponseEntity<List<ActiveRuleResponse>> getActiveRules() {
         return ResponseEntity.ok(ruleCacheService.getActiveRules());
+    }
+
+    @GetMapping("/decision-policy/active")
+    public ResponseEntity<DecisionPolicyCacheResponse> getActiveDecisionPolicy() {
+        return ResponseEntity.ok(ruleCacheService.getActiveDecisionPolicy());
     }
 
     @PostMapping("/sync")

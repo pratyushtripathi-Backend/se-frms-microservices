@@ -6,6 +6,7 @@ import com.se.frms.fraudengine.exception.ExternalServiceException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -15,7 +16,10 @@ import org.springframework.web.client.RestClientException;
 @Slf4j
 public class ScoringClient {
 
+    @Qualifier("restClientBuilder")
     private final RestClient.Builder restClientBuilder;
+    @Qualifier("directRestClientBuilder")
+    private final RestClient.Builder directRestClientBuilder;
 
     @Value("${frms.scoring.base-url}")
     private String scoringBaseUrl;
@@ -26,7 +30,7 @@ public class ScoringClient {
     public ScoringResponse score(ScoringRequest request) {
         log.info("Calling Scoring Service for transactionId={}", request.transactionId());
         try {
-            ScoringResponse response = restClientBuilder.build()
+            ScoringResponse response = restClientBuilder().build()
                     .post()
                     .uri(scoringBaseUrl + scoringPath)
                     .body(request)
@@ -42,5 +46,13 @@ public class ScoringClient {
             log.error("Scoring Service call failed for transactionId={}", request.transactionId(), ex);
             throw new ExternalServiceException("Unable to calculate fraud score", ex);
         }
+    }
+
+    private RestClient.Builder restClientBuilder() {
+        return isLocalUrl(scoringBaseUrl) ? directRestClientBuilder : restClientBuilder;
+    }
+
+    private boolean isLocalUrl(String url) {
+        return url != null && (url.contains("localhost") || url.contains("127.0.0.1"));
     }
 }

@@ -24,6 +24,14 @@ public class FraudEventProducer {
                 event.fraudDecision(),
                 event.totalRiskScore()
         );
-        kafkaTemplate.send(fraudEventsTopic, event.transactionId().toString(), event);
+        try {
+            kafkaTemplate.send(fraudEventsTopic, event.transactionId().toString(), event);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "Fraud event publish skipped transactionId={}, reason={}",
+                    event.transactionId(),
+                    ex.getMessage()
+            );
+        }
     }
 }

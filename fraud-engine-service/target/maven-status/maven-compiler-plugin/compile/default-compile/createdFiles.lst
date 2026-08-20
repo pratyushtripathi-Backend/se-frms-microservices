@@ -1,0 +1,10 @@
+com\se\frms\fraudengine\dto\ActiveRuleResponse.class
+com\se\frms\fraudengine\dto\DecisionResponse.class
+com\se\frms\fraudengine\dto\ScoringRequest.class
+com\se\frms\fraudengine\client\RuleCacheClient$1.class
+com\se\frms\fraudengine\config\RestClientConfig.class
+com\se\frms\fraudengine\cache\ActiveRuleCache.class
+com\se\frms\fraudengine\exception\ExternalServiceException.class
+com\se\frms\fraudengine\dto\ScoringResponse.class
+com\se\frms\fraudengine\dto\MatchedRuleResponse.class
+com\se\frms\fraudengine\dto\DecisionRequest.class
