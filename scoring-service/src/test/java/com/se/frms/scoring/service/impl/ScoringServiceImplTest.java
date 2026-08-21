@@ -51,20 +51,29 @@ class ScoringServiceImplTest {
                 List.of(
                         rule(1, "HIGH_AMOUNT", 30),
                         rule(2, "NEW_DEVICE", 20),
-                        rule(3, "UNMATCHED", 50)
+                        rule(3, "UNMATCHED", 50),
+                        expressionRule(4, "FOREIGN_CURRENCY", "currency != INR", 20),
+                        expressionRule(5, "SUSPICIOUS_IP", "ipRiskScore >= 70", 50),
+                        expressionRule(6, "BLOCKED_DEVICE", "deviceRiskScore >= 90", 60)
                 ),
                 Map.of(
                         "amount", 5000,
                         "highAmountThreshold", 1000,
-                        "matchedRuleCodes", List.of("NEW_DEVICE")
+                        "matchedRuleCodes", List.of("NEW_DEVICE"),
+                        "currency", "USD",
+                        "ipRiskScore", 80,
+                        "deviceRiskScore", 40
                 )
         ));
 
         assertThat(response.transactionId()).isEqualTo(transactionId);
-        assertThat(response.totalRiskScore()).isEqualTo(50);
-        assertThat(response.matchedRules()).hasSize(2);
+        assertThat(response.totalRiskScore()).isEqualTo(120);
+        assertThat(response.matchedRules()).hasSize(4);
         assertThat(response.triggeredRules()).containsEntry("HIGH_AMOUNT", 30);
         assertThat(response.triggeredRules()).containsEntry("NEW_DEVICE", 20);
+        assertThat(response.triggeredRules()).containsEntry("FOREIGN_CURRENCY", 20);
+        assertThat(response.triggeredRules()).containsEntry("SUSPICIOUS_IP", 50);
+        assertThat(response.triggeredRules()).doesNotContainKey("BLOCKED_DEVICE");
     }
 
     private RuleEvaluationRequest rule(Integer ruleId, String ruleCode, Integer ruleScore) {
@@ -75,6 +84,25 @@ class ScoringServiceImplTest {
                 ruleCode,
                 null,
                 null,
+                null,
+                ruleScore,
+                true
+        );
+    }
+
+    private RuleEvaluationRequest expressionRule(
+            Integer ruleId,
+            String ruleCode,
+            String expression,
+            Integer ruleScore
+    ) {
+        return new RuleEvaluationRequest(
+                ruleId,
+                null,
+                ruleCode,
+                ruleCode,
+                null,
+                expression,
                 null,
                 ruleScore,
                 true

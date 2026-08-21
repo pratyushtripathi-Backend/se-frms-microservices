@@ -11,6 +11,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiPredicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -23,6 +25,9 @@ public class RuleEvaluator {
     private static final String FRAUD_SIGNAL = "fraudSignal";
     private static final TypeReference<Map<String, Object>> EXPRESSION_TYPE = new TypeReference<>() {
     };
+    private static final Pattern SIMPLE_EXPRESSION = Pattern.compile(
+            "^\\s*([A-Za-z][A-Za-z0-9_]*)\\s*(>=|<=|!=|==|=|>|<)\\s*(.+?)\\s*$"
+    );
 
     private final ObjectMapper objectMapper;
 
@@ -41,12 +46,7 @@ public class RuleEvaluator {
     }
 
     public RuleEvaluationResult evaluate(RuleEvaluationRequest rule, Map<String, Object> transactionData) {
-        boolean matched = isActive(rule) && (
-                matchesRuleExpression(rule, transactionData)
-                        || matchesExplicitRuleCode(rule, transactionData)
-                        || matchesRuleBooleanFlag(rule, transactionData)
-                        || matchesRegisteredHandler(rule, transactionData)
-        );
+        boolean matched = isActive(rule) && matches(rule, transactionData);
 
         return new RuleEvaluationResult(
                 rule,
@@ -57,6 +57,18 @@ public class RuleEvaluator {
 
     private boolean isActive(RuleEvaluationRequest rule) {
         return !Boolean.FALSE.equals(rule.status());
+    }
+
+    private boolean matches(RuleEvaluationRequest rule, Map<String, Object> transactionData) {
+        // A configured expression is the source of truth; do not let a legacy
+        // rule-code handler match a different condition by accident.
+        if (StringUtils.hasText(rule.ruleExpression())) {
+            return matchesRuleExpression(rule, transactionData);
+        }
+
+        return matchesExplicitRuleCode(rule, transactionData)
+                || matchesRuleBooleanFlag(rule, transactionData)
+                || matchesRegisteredHandler(rule, transactionData);
     }
 
     private boolean matchesRegisteredHandler(RuleEvaluationRequest rule, Map<String, Object> transactionData) {
@@ -70,26 +82,49 @@ public class RuleEvaluator {
         }
         try {
             Map<String, Object> expression = objectMapper.readValue(rule.ruleExpression(), EXPRESSION_TYPE);
-            String field = Objects.toString(expression.get("field"), "");
-            String operator = normalize(Objects.toString(expression.get("operator"), ""));
-            Object expectedValue = expression.get("value");
-            Object actualValue = transactionData.get(field);
-
-            if (!StringUtils.hasText(field) || actualValue == null) {
-                return false;
-            }
-
-            return switch (operator) {
-                case "=", "==", "EQUALS" -> valuesEqual(actualValue, expectedValue);
-                case "!=", "NOT_EQUALS" -> !valuesEqual(actualValue, expectedValue);
-                case ">", ">=", "<", "<=" -> compareNumeric(actualValue, expectedValue, operator);
-                case "IN" -> collectionContains(expectedValue, actualValue.toString());
-                case "CONTAINS" -> actualValue.toString().contains(Objects.toString(expectedValue, ""));
-                default -> false;
-            };
+            return evaluateCondition(
+                    Objects.toString(expression.get("field"), ""),
+                    Objects.toString(expression.get("operator"), ""),
+                    expression.get("value"),
+                    transactionData
+            );
         } catch (Exception ex) {
+            return matchesSimpleExpression(rule.ruleExpression(), transactionData);
+        }
+    }
+
+    private boolean matchesSimpleExpression(String ruleExpression, Map<String, Object> transactionData) {
+        Matcher matcher = SIMPLE_EXPRESSION.matcher(ruleExpression);
+        if (!matcher.matches()) {
             return false;
         }
+
+        return evaluateCondition(matcher.group(1), matcher.group(2), stripWrappingQuotes(matcher.group(3)), transactionData);
+    }
+
+    private boolean evaluateCondition(String field, String operator, Object expectedValue, Map<String, Object> transactionData) {
+        Object actualValue = transactionData.get(field);
+        if (!StringUtils.hasText(field) || actualValue == null) {
+            return false;
+        }
+
+        return switch (normalize(operator)) {
+            case "=", "==", "EQUALS" -> valuesEqual(actualValue, expectedValue);
+            case "!=", "NOT_EQUALS" -> !valuesEqual(actualValue, expectedValue);
+            case ">", ">=", "<", "<=" -> compareNumeric(actualValue, expectedValue, normalize(operator));
+            case "IN" -> collectionContains(expectedValue, actualValue.toString());
+            case "CONTAINS" -> actualValue.toString().contains(Objects.toString(expectedValue, ""));
+            default -> false;
+        };
+    }
+
+    private String stripWrappingQuotes(String value) {
+        String trimmed = value.trim();
+        if (trimmed.length() >= 2 && ((trimmed.startsWith("\"") && trimmed.endsWith("\""))
+                || (trimmed.startsWith("'") && trimmed.endsWith("'")))) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
     }
 
     private boolean matchesExplicitRuleCode(RuleEvaluationRequest rule, Map<String, Object> transactionData) {
@@ -168,7 +203,11 @@ public class RuleEvaluator {
         if (value instanceof Number number) {
             return BigDecimal.valueOf(number.doubleValue());
         }
-        return new BigDecimal(value.toString());
+        try {
+            return new BigDecimal(value.toString());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private Integer safeScore(Integer ruleScore) {

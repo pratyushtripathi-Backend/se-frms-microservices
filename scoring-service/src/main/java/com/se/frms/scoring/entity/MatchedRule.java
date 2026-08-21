@@ -45,6 +45,9 @@ public class MatchedRule {
     @Column(name = "rule_name", nullable = false)
     private String ruleName;
 
+    @Column(name = "rule_expression", columnDefinition = "TEXT")
+    private String ruleExpression;
+
     @Column(name = "rule_score", nullable = false)
     private Integer ruleScore;
 

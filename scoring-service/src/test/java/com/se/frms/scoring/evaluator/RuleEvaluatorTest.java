@@ -84,6 +84,34 @@ class RuleEvaluatorTest {
         assertThat(result.calculatedScore()).isEqualTo(25);
     }
 
+    @Test
+    void shouldMatchPlainTextAmountExpression() {
+        RuleEvaluationRequest rule = new RuleEvaluationRequest(
+                1, null, "HIGH_AMOUNT", "High Amount", null,
+                "amount > 5000", null, 30, true
+        );
+
+        RuleEvaluationResult result = ruleEvaluator.evaluate(rule, Map.of("amount", 10000));
+
+        assertThat(result.matched()).isTrue();
+        assertThat(result.calculatedScore()).isEqualTo(30);
+    }
+
+    @Test
+    void shouldUseConfiguredExpressionInsteadOfHighAmountFallback() {
+        RuleEvaluationRequest rule = new RuleEvaluationRequest(
+                1, null, "HIGH_AMOUNT", "High Amount", null,
+                "amount > 5000", null, 30, true
+        );
+
+        RuleEvaluationResult result = ruleEvaluator.evaluate(
+                rule, Map.of("amount", 1000, "highAmountThreshold", 100)
+        );
+
+        assertThat(result.matched()).isFalse();
+        assertThat(result.calculatedScore()).isZero();
+    }
+
     private RuleEvaluationRequest rule(String ruleCode, Integer ruleScore) {
         return new RuleEvaluationRequest(
                 1,
