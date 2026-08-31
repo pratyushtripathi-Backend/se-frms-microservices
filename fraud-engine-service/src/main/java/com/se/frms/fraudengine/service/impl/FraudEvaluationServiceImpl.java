@@ -130,6 +130,7 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
                 decisionId,
                 response.totalRiskScore(),
                 response.finalDecision(),
+                response.decisionReason(),
                 request.transactionData(),
                 triggeredRules,
                 Instant.now()

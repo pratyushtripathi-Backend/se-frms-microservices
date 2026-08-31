@@ -10,6 +10,7 @@ public record FraudEvent(
         UUID decisionId,
         Integer totalRiskScore,
         String fraudDecision,
+        String decisionReason,
         Map<String, Object> transactionData,
         Map<String, Object> triggeredRules,
         Instant occurredAt

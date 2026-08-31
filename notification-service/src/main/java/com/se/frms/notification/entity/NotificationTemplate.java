@@ -4,7 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -14,28 +13,36 @@ import lombok.Setter;
 @Getter
 @Setter
 @Entity
-@Table(name = "se_frms_notification")
-public class Notification {
+@Table(name = "se_frms_notification_template")
+public class NotificationTemplate {
     @Id
     @GeneratedValue
     private UUID id;
 
-    private UUID transactionId;
+    @Column(nullable = false, unique = true, length = 100)
+    private String templateCode;
+
+    @Column(nullable = false, length = 20)
     private String notificationType;
-    private String recipient;
-    private String subject;
-    @Lob
-    @Column(columnDefinition = "TEXT")
-    private String message;
+
+    @Column(nullable = false, length = 20)
     private String fraudDecision;
-    private Integer riskScore;
-    private String notificationStatus;
-    private String alertStatus;
-    @Column(nullable = false, columnDefinition = "INTEGER DEFAULT 0")
-    private Integer retryCount;
-    private String failureReason;
+
+    @Column(nullable = false, length = 255)
+    private String subjectTemplate;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String bodyTemplate;
+
+    @Column(nullable = false)
     private Boolean status;
+
+    @Column(nullable = false, length = 100)
     private String createdBy;
+
+    @Column(nullable = false)
     private LocalDateTime createdDate;
+
+    @Column(nullable = false)
     private LocalDateTime updatedAt;
 }
