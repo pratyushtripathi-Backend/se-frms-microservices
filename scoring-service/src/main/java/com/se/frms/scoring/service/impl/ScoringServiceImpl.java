@@ -10,6 +10,7 @@ import com.se.frms.scoring.evaluator.RuleEvaluator;
 import com.se.frms.scoring.exception.ScoringNotFoundException;
 import com.se.frms.scoring.repository.MatchedRuleRepository;
 import com.se.frms.scoring.repository.ScoringRepository;
+import com.se.frms.scoring.service.ScoringPersistenceService;
 import com.se.frms.scoring.service.ScoringService;
 import java.util.List;
 import java.util.Map;
@@ -25,14 +26,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class ScoringServiceImpl implements ScoringService {
 
-    private static final String SYSTEM_USER = "SCORING_SERVICE";
-
     private final ScoringRepository scoringRepository;
     private final MatchedRuleRepository matchedRuleRepository;
+    private final ScoringPersistenceService scoringPersistenceService;
     private final RuleEvaluator ruleEvaluator;
 
     @Override
-    @Transactional
     public ScoringResponse process(ScoringRequest request) {
         long startedAt = System.nanoTime();
         log.info(
@@ -41,39 +40,39 @@ public class ScoringServiceImpl implements ScoringService {
                 request.activeRules().size()
         );
 
-        Scoring scoring = new Scoring();
-        scoring.setTransactionId(request.transactionId());
-        scoring.setTotalRiskScore(0);
-        scoring.setStatus(true);
-        scoring.setCreatedBy(SYSTEM_USER);
-        scoring = scoringRepository.save(scoring);
-
-        Scoring savedScoring = scoring;
         List<RuleEvaluationResult> matchedResults = request.activeRules()
                 .stream()
                 .map(rule -> ruleEvaluator.evaluate(rule, request.transactionData()))
                 .filter(RuleEvaluationResult::matched)
                 .toList();
 
-        List<MatchedRule> matchedRules = matchedResults.stream()
-                .map(result -> buildMatchedRule(savedScoring, result))
-                .toList();
-        matchedRuleRepository.saveAll(matchedRules);
-
         int totalRiskScore = matchedResults.stream()
                 .mapToInt(result -> result.calculatedScore() != null ? result.calculatedScore() : 0)
                 .sum();
+        UUID scoringId = UUID.randomUUID();
 
-        scoring.setTotalRiskScore(totalRiskScore);
-        scoring = scoringRepository.save(scoring);
+        scoringPersistenceService.saveScoring(
+                scoringId,
+                request.transactionId(),
+                totalRiskScore,
+                matchedResults
+        );
 
-        ScoringResponse response = toResponse(scoring, matchedRules);
+        ScoringResponse response = new ScoringResponse(
+                scoringId,
+                request.transactionId(),
+                totalRiskScore,
+                matchedResults.stream()
+                        .map(result -> mapToResponse(result.rule(), result.calculatedScore()))
+                        .toList(),
+                buildTriggeredRules(matchedResults)
+        );
 
         log.info(
-                "Scoring completed transactionId={}, scoringId={}, matchedRuleCount={}, totalRiskScore={}, elapsedMs={}",
+                "Scoring calculated transactionId={}, scoringId={}, matchedRuleCount={}, totalRiskScore={}, elapsedMs={}",
                 request.transactionId(),
-                scoring.getId(),
-                matchedRules.size(),
+                scoringId,
+                matchedResults.size(),
                 totalRiskScore,
                 elapsedMillis(startedAt)
         );
@@ -108,20 +107,6 @@ public class ScoringServiceImpl implements ScoringService {
                 .toList();
     }
 
-    private MatchedRule buildMatchedRule(Scoring scoring, RuleEvaluationResult result) {
-        MatchedRule matchedRule = new MatchedRule();
-        matchedRule.setScoring(scoring);
-        matchedRule.setRuleId(result.rule().ruleId());
-        matchedRule.setRuleCode(result.rule().ruleCode());
-        matchedRule.setRuleName(result.rule().ruleName());
-        matchedRule.setRuleExpression(result.rule().ruleExpression());
-        matchedRule.setRuleScore(result.rule().ruleScore());
-        matchedRule.setCalculatedScore(result.calculatedScore());
-        matchedRule.setStatus(true);
-        matchedRule.setCreatedBy(SYSTEM_USER);
-        return matchedRule;
-    }
-
     /**
      * Central place that builds a ScoringResponse from a Scoring + its
      * MatchedRule list. Used by process() AND all the GET methods, so
@@ -145,6 +130,29 @@ public class ScoringServiceImpl implements ScoringService {
                 scoring.getTotalRiskScore(),
                 matchedRuleResponses,
                 triggeredRules
+        );
+    }
+
+    private Map<String, Object> buildTriggeredRules(List<RuleEvaluationResult> matchedResults) {
+        return matchedResults.stream()
+                .collect(Collectors.toMap(
+                        result -> result.rule().ruleCode(),
+                        RuleEvaluationResult::calculatedScore,
+                        (left, right) -> left
+                ));
+    }
+
+    private MatchedRuleResponse mapToResponse(
+            com.se.frms.scoring.dto.RuleEvaluationRequest rule,
+            Integer calculatedScore
+    ) {
+        return new MatchedRuleResponse(
+                rule.ruleId(),
+                rule.ruleCode(),
+                rule.ruleName(),
+                rule.ruleExpression(),
+                rule.ruleScore(),
+                calculatedScore
         );
     }
 

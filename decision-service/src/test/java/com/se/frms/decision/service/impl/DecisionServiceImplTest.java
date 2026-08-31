@@ -1,17 +1,15 @@
 package com.se.frms.decision.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.se.frms.decision.cache.DecisionPolicyCache;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionResponse;
-import com.se.frms.decision.entity.Decision;
 import com.se.frms.decision.repository.DecisionRepository;
+import com.se.frms.decision.service.DecisionPersistenceService;
 import java.lang.reflect.Field;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,20 +26,17 @@ class DecisionServiceImplTest {
     @Mock
     private DecisionPolicyCache decisionPolicyCache;
 
+    @Mock
+    private DecisionPersistenceService decisionPersistenceService;
+
     private DecisionServiceImpl decisionService;
 
     @BeforeEach
     void setUp() throws Exception {
-        decisionService = new DecisionServiceImpl(decisionRepository, decisionPolicyCache);
+        decisionService = new DecisionServiceImpl(decisionRepository, decisionPolicyCache, decisionPersistenceService);
         setField("allowMaxScore", 39);
         setField("reviewMaxScore", 69);
         when(decisionPolicyCache.getActivePolicy()).thenReturn(null);
-        when(decisionRepository.findByTransactionId(any())).thenReturn(Optional.empty());
-        when(decisionRepository.save(any(Decision.class))).thenAnswer(invocation -> {
-            Decision decision = invocation.getArgument(0);
-            decision.setId(UUID.randomUUID());
-            return decision;
-        });
     }
 
     @Test

@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -17,7 +18,9 @@ public class FraudEventProducer {
     @Value("${frms.kafka.topic.fraud-events}")
     private String fraudEventsTopic;
 
+    @Async
     public void publish(FraudEvent event) {
+        long startedAt = System.nanoTime();
         log.info(
                 "Publishing fraud event transactionId={}, decision={}, riskScore={}",
                 event.transactionId(),
@@ -26,6 +29,11 @@ public class FraudEventProducer {
         );
         try {
             kafkaTemplate.send(fraudEventsTopic, event.transactionId().toString(), event);
+            log.info(
+                    "Fraud event publish triggered transactionId={}, elapsedMs={}",
+                    event.transactionId(),
+                    elapsedMillis(startedAt)
+            );
         } catch (RuntimeException ex) {
             log.warn(
                     "Fraud event publish skipped transactionId={}, reason={}",
@@ -33,5 +41,9 @@ public class FraudEventProducer {
                     ex.getMessage()
             );
         }
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
     }
 }

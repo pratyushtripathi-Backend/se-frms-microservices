@@ -1,4 +1,5 @@
 com\se\frms\decision\cache\DecisionPolicyCache.class
 com\se\frms\decision\client\RuleCacheDecisionPolicyClient.class
 com\se\frms\decision\config\RestClientConfig.class
+com\se\frms\decision\service\DecisionPersistenceService.class
 com\se\frms\decision\dto\DecisionPolicyResponse.class

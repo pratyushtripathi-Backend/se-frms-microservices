@@ -6,7 +6,9 @@ import com.se.frms.decision.dto.DecisionPolicyResponse;
 import com.se.frms.decision.dto.DecisionResponse;
 import com.se.frms.decision.entity.Decision;
 import com.se.frms.decision.repository.DecisionRepository;
+import com.se.frms.decision.service.DecisionPersistenceService;
 import com.se.frms.decision.service.DecisionService;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,11 +28,11 @@ public class DecisionServiceImpl implements DecisionService {
     private static final String ALLOW = "ALLOW";
     private static final String REVIEW = "REVIEW";
     private static final String BLOCK = "BLOCK";
-    private static final String SYSTEM_USER = "DECISION_SERVICE";
 
     private final DecisionRepository decisionRepository;
 
     private final DecisionPolicyCache decisionPolicyCache;
+    private final DecisionPersistenceService decisionPersistenceService;
 
     @Value("${decision.threshold.allow-max:39}")
     private Integer allowMaxScore;
@@ -39,27 +41,28 @@ public class DecisionServiceImpl implements DecisionService {
     private Integer reviewMaxScore;
 
     @Override
-    @Transactional
     public DecisionResponse process(DecisionRequest request) {
         long startedAt = System.nanoTime();
         DecisionPolicyResponse activePolicy =
                 decisionPolicyCache.getActivePolicy();
         String finalDecision = resolveDecision(request.totalRiskScore(), activePolicy);
         String reason = buildDecisionReason(request.totalRiskScore(), finalDecision, activePolicy);
+        UUID decisionId = UUID.randomUUID();
+        LocalDateTime decisionTimestamp = LocalDateTime.now();
 
-        Decision decision = decisionRepository.findByTransactionId(request.transactionId())
-                .orElseGet(Decision::new);
-        decision.setTransactionId(request.transactionId());
-        decision.setScoringId(request.scoringId());
-        decision.setTotalRiskScore(request.totalRiskScore());
-        decision.setFinalDecision(finalDecision);
-        decision.setDecisionReason(reason);
-        decision.setStatus(true);
-        decision.setCreatedBy(SYSTEM_USER);
-        decision = decisionRepository.save(decision);
+        decisionPersistenceService.saveDecision(
+                decisionId,
+                request.transactionId(),
+                request.scoringId(),
+                request.totalRiskScore(),
+                finalDecision,
+                reason,
+                decisionTimestamp,
+                decisionTimestamp
+        );
 
         log.info(
-                "Decision completed transactionId={}, scoringId={}, totalRiskScore={}, finalDecision={}, elapsedMs={}",
+                "Decision calculated transactionId={}, scoringId={}, totalRiskScore={}, finalDecision={}, elapsedMs={}",
                 request.transactionId(),
                 request.scoringId(),
                 request.totalRiskScore(),
@@ -67,7 +70,16 @@ public class DecisionServiceImpl implements DecisionService {
                 elapsedMillis(startedAt)
         );
 
-        return mapToResponse(decision);
+        return new DecisionResponse(
+                decisionId,
+                request.transactionId(),
+                request.scoringId(),
+                request.totalRiskScore(),
+                finalDecision,
+                reason,
+                decisionTimestamp,
+                decisionTimestamp
+        );
     }
 
     @Override
@@ -165,7 +177,9 @@ public class DecisionServiceImpl implements DecisionService {
                 decision.getScoringId(),
                 decision.getTotalRiskScore(),
                 decision.getFinalDecision(),
-                decision.getDecisionReason()
+                decision.getDecisionReason(),
+                decision.getCreatedAt(),
+                decision.getUpdatedAt()
         );
     }
 }

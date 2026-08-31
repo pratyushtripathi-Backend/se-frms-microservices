@@ -50,21 +50,28 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
             return response;
         }
 
+        long rulesStartedAt = System.nanoTime();
         List<ActiveRuleResponse> activeRules = activeRuleCache.getActiveRules();
+        long rulesMs = elapsedMillis(rulesStartedAt);
         log.info("Using active rule cache transactionId={}, ruleCount={}", request.transactionId(), activeRules.size());
+
+        long scoringStartedAt = System.nanoTime();
         ScoringResponse scoringResponse = scoringClient.score(new ScoringRequest(
                 request.transactionId(),
                 activeRules,
                 request.transactionData()
         ));
+        long scoringMs = elapsedMillis(scoringStartedAt);
 
         Integer totalRiskScore = scoringResponse != null ? scoringResponse.totalRiskScore() : 0;
+        long decisionStartedAt = System.nanoTime();
         DecisionResponse decisionResponse = decisionClient.decide(new DecisionRequest(
                 request.transactionId(),
                 scoringResponse != null ? scoringResponse.scoringId() : null,
                 totalRiskScore,
                 request.transactionData()
         ));
+        long decisionMs = elapsedMillis(decisionStartedAt);
 
         String finalDecision = decisionResponse != null && decisionResponse.finalDecision() != null
                 ? decisionResponse.finalDecision()
@@ -79,6 +86,7 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
                 decisionReason
         );
 
+        long eventStartedAt = System.nanoTime();
         publishFraudEvent(
                 request,
                 response,
@@ -88,11 +96,16 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
                         ? scoringResponse.triggeredRules()
                         : Map.of()
         );
+        long eventTriggerMs = elapsedMillis(eventStartedAt);
         log.info(
-                "Fraud evaluation completed transactionId={}, finalDecision={}, totalRiskScore={}, elapsedMs={}",
+                "Fraud evaluation completed transactionId={}, finalDecision={}, totalRiskScore={}, rulesMs={}, scoringMs={}, decisionMs={}, eventTriggerMs={}, elapsedMs={}",
                 request.transactionId(),
                 finalDecision,
                 totalRiskScore,
+                rulesMs,
+                scoringMs,
+                decisionMs,
+                eventTriggerMs,
                 elapsedMillis(startedAt)
         );
         return response;

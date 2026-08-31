@@ -47,8 +47,9 @@ public class TransactionServiceImpl implements TransactionService {
                 request.userId()
         );
         TransactionMaster transaction = createTransaction(request);
-        Optional<TransactionMaster> originalTransaction = transactionRepository
-                .findFirstByExternalTransactionIdOrderByCreatedDateAsc(transaction.getExternalTransactionId());
+        long duplicateCheckStartedAt = System.nanoTime();
+        Optional<TransactionMaster> originalTransaction = findOriginalTransaction(transaction.getExternalTransactionId());
+        long duplicateCheckMs = elapsedMillis(duplicateCheckStartedAt);
 
         if (originalTransaction.isPresent()) {
             log.warn(
@@ -57,18 +58,26 @@ public class TransactionServiceImpl implements TransactionService {
                     originalTransaction.get().getId()
             );
             markAsDuplicateFraud(transaction, originalTransaction.get());
+        } else {
+            transaction.setStatus(TransactionStatus.FRAUD_EVALUATION_IN_PROGRESS.name());
+            transaction.setUpdatedAt(LocalDateTime.now());
         }
+
+        long saveStartedAt = System.nanoTime();
         transaction = transactionRepository.save(transaction);
+        long saveMs = elapsedMillis(saveStartedAt);
 
         if (Boolean.TRUE.equals(transaction.getDuplicateTransaction())) {
             duplicateFraudNotificationService.notifyFraudEngine(
                     new FraudEvaluationRequest(transaction.getId(), transaction.getTransactionData())
             );
             log.warn(
-                    "Duplicate fraud response returned transactionId={}, externalTransactionId={}, originalTransactionId={}, elapsedMs={}",
+                    "Duplicate fraud response returned transactionId={}, externalTransactionId={}, originalTransactionId={}, duplicateCheckMs={}, saveMs={}, elapsedMs={}",
                     transaction.getId(),
                     transaction.getExternalTransactionId(),
                     transaction.getOriginalTransactionId(),
+                    duplicateCheckMs,
+                    saveMs,
                     elapsedMillis(startedAt)
             );
             return new TransactionResponse(
@@ -80,14 +89,16 @@ public class TransactionServiceImpl implements TransactionService {
             );
         }
 
-        transaction.setStatus(TransactionStatus.FRAUD_EVALUATION_IN_PROGRESS.name());
-        transaction.setUpdatedAt(LocalDateTime.now());
-        transaction = transactionRepository.save(transaction);
+        long asyncTriggerStartedAt = System.nanoTime();
         transactionEvaluationService.evaluate(transaction.getId(), transaction.getTransactionData());
+        long asyncTriggerMs = elapsedMillis(asyncTriggerStartedAt);
         log.info(
-                "Transaction accepted for async fraud evaluation transactionId={}, externalTransactionId={}, elapsedMs={}",
+                "Transaction accepted for async fraud evaluation transactionId={}, externalTransactionId={}, duplicateCheckMs={}, saveMs={}, asyncTriggerMs={}, elapsedMs={}",
                 transaction.getId(),
                 transaction.getExternalTransactionId(),
+                duplicateCheckMs,
+                saveMs,
+                asyncTriggerMs,
                 elapsedMillis(startedAt)
         );
 
@@ -194,6 +205,13 @@ public class TransactionServiceImpl implements TransactionService {
         transaction.getTransactionData().put("duplicateReason", "IDEMPOTENT_TRANSACTION_RETRY");
         transaction.getTransactionData().put("originalTransactionId", original.getId().toString());
         transaction.getTransactionData().put("fraudSignal", "DUPLICATE_EXTERNAL_TRANSACTION_ID");
+    }
+
+    private Optional<TransactionMaster> findOriginalTransaction(String externalTransactionId) {
+        if (!StringUtils.hasText(externalTransactionId)) {
+            return Optional.empty();
+        }
+        return transactionRepository.findFirstByExternalTransactionIdOrderByCreatedDateAsc(externalTransactionId);
     }
 
     private long elapsedMillis(long startedAt) {

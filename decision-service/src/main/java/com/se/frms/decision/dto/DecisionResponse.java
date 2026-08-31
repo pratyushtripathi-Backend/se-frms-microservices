@@ -1,5 +1,6 @@
 package com.se.frms.decision.dto;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record DecisionResponse(
@@ -8,6 +9,8 @@ public record DecisionResponse(
         UUID scoringId,
         Integer totalRiskScore,
         String finalDecision,
-        String reason
+        String reason,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt
 ) {
 }

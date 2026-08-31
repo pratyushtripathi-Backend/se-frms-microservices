@@ -1,17 +1,14 @@
 package com.se.frms.scoring.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
 import com.se.frms.scoring.dto.RuleEvaluationRequest;
 import com.se.frms.scoring.dto.ScoringRequest;
 import com.se.frms.scoring.dto.ScoringResponse;
-import com.se.frms.scoring.entity.MatchedRule;
-import com.se.frms.scoring.entity.Scoring;
 import com.se.frms.scoring.evaluator.RuleEvaluator;
 import com.se.frms.scoring.repository.MatchedRuleRepository;
 import com.se.frms.scoring.repository.ScoringRepository;
+import com.se.frms.scoring.service.ScoringPersistenceService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +27,9 @@ class ScoringServiceImplTest {
     @Mock
     private MatchedRuleRepository matchedRuleRepository;
 
+    @Mock
+    private ScoringPersistenceService scoringPersistenceService;
+
     private final RuleEvaluator ruleEvaluator = new RuleEvaluator();
 
     @InjectMocks
@@ -37,13 +37,7 @@ class ScoringServiceImplTest {
 
     @Test
     void shouldCalculateTotalRiskScoreFromMatchedRules() {
-        scoringService = new ScoringServiceImpl(scoringRepository, matchedRuleRepository, ruleEvaluator);
-        when(scoringRepository.save(any(Scoring.class))).thenAnswer(invocation -> {
-            Scoring scoring = invocation.getArgument(0);
-            scoring.setId(UUID.randomUUID());
-            return scoring;
-        });
-        when(matchedRuleRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        scoringService = new ScoringServiceImpl(scoringRepository, matchedRuleRepository, scoringPersistenceService, ruleEvaluator);
 
         UUID transactionId = UUID.randomUUID();
         ScoringResponse response = scoringService.process(new ScoringRequest(

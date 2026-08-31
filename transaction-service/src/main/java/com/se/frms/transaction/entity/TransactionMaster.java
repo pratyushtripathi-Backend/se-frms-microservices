@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -17,7 +18,19 @@ import org.hibernate.type.SqlTypes;
 @Getter
 @Setter
 @Entity
-@Table(name = "se_frms_transaction_master")
+@Table(
+        name = "se_frms_transaction_master",
+        indexes = {
+                @Index(name = "idx_transaction_external_transaction_id", columnList = "external_transaction_id"),
+                @Index(name = "idx_transaction_status", columnList = "status"),
+                @Index(name = "idx_transaction_merchant_id", columnList = "merchant_id"),
+                @Index(name = "idx_transaction_user_id", columnList = "user_id"),
+                @Index(name = "idx_transaction_channel", columnList = "channel"),
+                @Index(name = "idx_transaction_transaction_type", columnList = "transaction_type"),
+                @Index(name = "idx_transaction_currency", columnList = "currency"),
+                @Index(name = "idx_transaction_created_date", columnList = "created_date")
+        }
+)
 public class TransactionMaster {
 
     @Id
@@ -66,7 +79,13 @@ public class TransactionMaster {
 
     private String remarks;
     private String status;
+
+    @Column(name = "created_by")
     private String createdBy;
+
+    @Column(name = "created_date")
     private LocalDateTime createdDate;
+
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 }
