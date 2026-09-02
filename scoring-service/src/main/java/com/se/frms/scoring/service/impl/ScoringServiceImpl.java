@@ -1,5 +1,7 @@
 package com.se.frms.scoring.service.impl;
 
+import com.se.frms.scoring.dto.MatchedRuleHistoryResponse;
+import com.se.frms.scoring.dto.ScoringHistoryResponse;
 import com.se.frms.scoring.dto.MatchedRuleResponse;
 import com.se.frms.scoring.dto.RuleEvaluationResult;
 import com.se.frms.scoring.dto.ScoringRequest;
@@ -16,6 +18,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -164,6 +171,75 @@ public class ScoringServiceImpl implements ScoringService {
                 matchedRule.getRuleExpression(),
                 matchedRule.getRuleScore(),
                 matchedRule.getCalculatedScore()
+        );
+    }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<MatchedRuleHistoryResponse> getAllMatchedRules(Integer page, Integer size) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdDate");
+
+        // No size passed -> caller wants EVERYTHING, no pagination.
+        if (size == null) {
+            List<MatchedRuleHistoryResponse> all = matchedRuleRepository.findAll(sort)
+                    .stream()
+                    .map(this::mapToHistoryResponse)
+                    .toList();
+            return new PageImpl<>(all, Pageable.unpaged(), all.size());
+        }
+
+        Pageable pageable = PageRequest.of(page != null ? page : 0, size, sort);
+        return matchedRuleRepository.findAllByOrderByCreatedDateDesc(pageable)
+                .map(this::mapToHistoryResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ScoringHistoryResponse> getAllScorings(Integer page, Integer size) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdDate");
+
+        // No size passed -> caller wants EVERYTHING, no pagination.
+        if (size == null) {
+            List<ScoringHistoryResponse> all = scoringRepository.findAll(sort)
+                    .stream()
+                    .map(this::mapToScoringHistoryResponse)
+                    .toList();
+            return new PageImpl<>(all, Pageable.unpaged(), all.size());
+        }
+
+        Pageable pageable = PageRequest.of(page != null ? page : 0, size, sort);
+        return scoringRepository.findAll(pageable)
+                .map(this::mapToScoringHistoryResponse);
+    }
+
+    private ScoringHistoryResponse mapToScoringHistoryResponse(Scoring scoring) {
+        return new ScoringHistoryResponse(
+                scoring.getId(),
+                scoring.getTransactionId(),
+                scoring.getTotalRiskScore(),
+                scoring.getStatus(),
+                scoring.getCreatedBy(),
+                scoring.getCreatedDate(),
+                scoring.getUpdatedAt()
+        );
+    }
+
+    private MatchedRuleHistoryResponse mapToHistoryResponse(MatchedRule matchedRule) {
+        return new MatchedRuleHistoryResponse(
+                matchedRule.getId(),
+                matchedRule.getScoring().getId(),
+                matchedRule.getScoring().getTransactionId(),
+                matchedRule.getRuleId(),
+                matchedRule.getRuleCode(),
+                matchedRule.getRuleName(),
+                matchedRule.getRuleExpression(),
+                matchedRule.getRuleScore(),
+                matchedRule.getCalculatedScore(),
+                matchedRule.getStatus(),
+                matchedRule.getCreatedBy(),
+                matchedRule.getCreatedDate(),
+                matchedRule.getUpdatedAt()
         );
     }
 

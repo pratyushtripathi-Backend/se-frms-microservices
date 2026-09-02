@@ -1,11 +1,15 @@
 package com.se.frms.scoring.controller;
 
+import com.se.frms.scoring.dto.MatchedRuleHistoryResponse;
+import com.se.frms.scoring.dto.ScoringHistoryResponse;
 import com.se.frms.scoring.dto.ScoringRequest;
 import com.se.frms.scoring.dto.ScoringResponse;
 import com.se.frms.scoring.service.ScoringService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.web.bind.annotation.RequestParam;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -53,5 +57,23 @@ public class ScoringController {
     public ResponseEntity<List<ScoringResponse>> getHistoryByTransactionId(@PathVariable UUID transactionId) {
         log.info("GET /api/v1/scoring/transaction/{}/history", transactionId);
         return ResponseEntity.ok(scoringService.getHistoryByTransactionId(transactionId));
+    }
+
+    @GetMapping("/matched-rules")
+    public ResponseEntity<Page<MatchedRuleHistoryResponse>> getAllMatchedRules(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
+    ) {
+        log.info("GET /api/v1/scoring/matched-rules, page={}, size={}", page, size);
+        return ResponseEntity.ok(scoringService.getAllMatchedRules(page, size));
+    }
+
+    @GetMapping("/history")
+    public ResponseEntity<Page<ScoringHistoryResponse>> getAllScorings(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
+    ) {
+        log.info("GET /api/v1/scoring/history, page={}, size={}", page, size);
+        return ResponseEntity.ok(scoringService.getAllScorings(page, size));
     }
 }

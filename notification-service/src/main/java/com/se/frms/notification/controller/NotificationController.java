@@ -2,18 +2,13 @@ package com.se.frms.notification.controller;
 
 import com.se.frms.notification.dto.NotificationResponse;
 import com.se.frms.notification.dto.UpdateAlertStatusRequest;
-import com.se.frms.notification.service.NotificationRecipientCacheService;
 import com.se.frms.notification.service.NotificationService;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,13 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
 public class NotificationController {
-    private static final String INTERNAL_API_KEY_HEADER = "X-INTERNAL-API-KEY";
 
     private final NotificationService notificationService;
-    private final NotificationRecipientCacheService recipientCacheService;
-
-    @org.springframework.beans.factory.annotation.Value("${notification.monolith.internal-api-key}")
-    private String internalApiKey;
 
     @GetMapping
     public ResponseEntity<Page<NotificationResponse>> getNotifications(
@@ -82,38 +72,6 @@ public class NotificationController {
             Pageable pageable
     ) {
         return ResponseEntity.ok(notificationService.getNotificationsByTransactionId(transactionId, pageable));
-    }
-
-    /**
-     * Internal operational endpoint. The Monolith calls this after an ADMIN
-     * recipient is created, updated, activated, or deactivated. Fraud-event
-     * processing continues to read recipients only from Redis.
-     */
-    @org.springframework.web.bind.annotation.PostMapping("/internal/recipients/refresh")
-    public ResponseEntity<Map<String, Object>> refreshRecipients(
-            @org.springframework.web.bind.annotation.RequestHeader(
-                    name = INTERNAL_API_KEY_HEADER, required = false) String providedApiKey
-    ) {
-        if (!isAuthorized(providedApiKey)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Invalid internal API key"));
-        }
-
-        recipientCacheService.refreshRecipients();
-        return ResponseEntity.ok(Map.of(
-                "message", "Admin notification recipient cache refreshed successfully",
-                "recipientCount", recipientCacheService.getCachedRecipients().size()
-        ));
-    }
-
-    private boolean isAuthorized(String providedApiKey) {
-        if (providedApiKey == null || internalApiKey == null) {
-            return false;
-        }
-        return MessageDigest.isEqual(
-                internalApiKey.getBytes(StandardCharsets.UTF_8),
-                providedApiKey.getBytes(StandardCharsets.UTF_8)
-        );
     }
 
 }
