@@ -10,9 +10,12 @@ public record FraudEvent(
         UUID decisionId,
         Integer totalRiskScore,
         String fraudDecision,
-        String decisionReason,
         Map<String, Object> transactionData,
         Map<String, Object> triggeredRules,
-        Instant occurredAt
+        Instant occurredAt,
+        // Traces this event back to the originating transaction-service
+        // request (X-Request-Id), so consumers can log/measure end-to-end
+        // latency against the same ID used across every synchronous hop.
+        String correlationId
 ) {
 }

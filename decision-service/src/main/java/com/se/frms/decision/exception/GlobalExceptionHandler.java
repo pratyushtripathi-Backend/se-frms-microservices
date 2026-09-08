@@ -20,6 +20,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(ex.getMessage());
     }
 
+    @ExceptionHandler(ExternalServiceException.class)
+    public ResponseEntity<String> handleExternalService(ExternalServiceException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(ex.getMessage());
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<String> handleResponseStatus(ResponseStatusException ex) {
         return ResponseEntity.status(ex.getStatusCode()).body(ex.getReason());

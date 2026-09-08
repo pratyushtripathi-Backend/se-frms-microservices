@@ -87,6 +87,11 @@ public class NotificationServiceImpl implements NotificationService {
 
         createIfAbsent(event, decision, DASHBOARD, FRAUD_ADMIN_DASHBOARD,
                 dashboardSubject(decision), message, "SENT");
+        // Marks when the dashboard row is actually queryable, separate from
+        // the slower email/SMS sends below (external network calls) — this
+        // is the timestamp that matters for a "dashboard alert" latency
+        // budget, not when handleFraudEvent() finishes entirely.
+        log.info("Dashboard notification ready transactionId={}", event.transactionId());
 
         if (BLOCK.equals(decision) || REVIEW.equals(decision)) {
             // Dispatched to a bounded background pool instead of running inline: a slow

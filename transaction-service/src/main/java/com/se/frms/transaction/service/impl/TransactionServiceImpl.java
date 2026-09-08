@@ -23,8 +23,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import com.se.frms.transaction.filter.CorrelationIdFilter;
 
 @Service
 @RequiredArgsConstructor
@@ -89,13 +91,20 @@ public class TransactionServiceImpl implements TransactionService {
             );
         }
 
+        // @Async hands work to a different thread, so MDC (thread-local) would
+        // not otherwise carry over. Capture it here on the request thread and
+        // pass it explicitly so downstream logs/calls still trace to this
+        // transaction's correlation ID.
+        String correlationId = MDC.get(CorrelationIdFilter.MDC_KEY);
+
         long asyncTriggerStartedAt = System.nanoTime();
-        transactionEvaluationService.evaluate(transaction.getId(), transaction.getTransactionData());
+        transactionEvaluationService.evaluate(transaction.getId(), transaction.getTransactionData(), correlationId);
         long asyncTriggerMs = elapsedMillis(asyncTriggerStartedAt);
         log.info(
-                "Transaction accepted for async fraud evaluation transactionId={}, externalTransactionId={}, duplicateCheckMs={}, saveMs={}, asyncTriggerMs={}, elapsedMs={}",
+                "Transaction accepted for async fraud evaluation transactionId={}, externalTransactionId={}, correlationId={}, duplicateCheckMs={}, saveMs={}, asyncTriggerMs={}, elapsedMs={}",
                 transaction.getId(),
                 transaction.getExternalTransactionId(),
+                correlationId,
                 duplicateCheckMs,
                 saveMs,
                 asyncTriggerMs,

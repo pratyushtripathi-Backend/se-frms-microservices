@@ -1,0 +1,28 @@
+{
+  "groups": [
+    {
+      "name": "frms.security",
+      "type": "com.se.frms.gateway.config.GatewaySecurityProperties",
+      "sourceType": "com.se.frms.gateway.config.GatewaySecurityProperties"
+    },
+    {
+      "name": "frms.security.jwt",
+      "type": "com.se.frms.gateway.config.GatewaySecurityProperties$Jwt",
+      "sourceType": "com.se.frms.gateway.config.GatewaySecurityProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "frms.security.jwt.secret",
+      "type": "java.lang.String",
+      "sourceType": "com.se.frms.gateway.config.GatewaySecurityProperties$Jwt"
+    },
+    {
+      "name": "frms.security.public-paths",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Ant-style path patterns (e.g. \/actuator\/**) that bypass JWT validation entirely. Everything else requires a valid Bearer token.",
+      "sourceType": "com.se.frms.gateway.config.GatewaySecurityProperties"
+    }
+  ],
+  "hints": []
+}

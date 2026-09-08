@@ -1,6 +1,7 @@
 package com.se.frms.audit.controller;
 
 import com.se.frms.audit.dto.AuditLogResponse;
+import com.se.frms.audit.dto.AuditTrailDetailResponse;
 import com.se.frms.audit.service.AuditService;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -46,5 +47,11 @@ public class AuditLogController {
                 pageable.getPageSize()
         );
         return ResponseEntity.ok(auditService.getByTransactionId(transactionId, pageable));
+    }
+
+    @GetMapping("/transaction/{transactionId}/details")
+    public ResponseEntity<AuditTrailDetailResponse> getTransactionDetails(@PathVariable UUID transactionId) {
+        log.info("GET /api/v1/audit-logs/transaction/{}/details received", transactionId);
+        return ResponseEntity.ok(auditService.getTransactionDetails(transactionId));
     }
 }
