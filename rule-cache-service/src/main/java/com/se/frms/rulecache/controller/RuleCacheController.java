@@ -1,5 +1,6 @@
 package com.se.frms.rulecache.controller;
 
+import com.se.frms.rulecache.dto.ActiveBlacklistResponse;
 import com.se.frms.rulecache.dto.ActiveRuleResponse;
 import com.se.frms.rulecache.dto.DecisionPolicyCacheResponse;
 import com.se.frms.rulecache.service.RuleCacheService;
@@ -32,6 +33,11 @@ public class RuleCacheController {
     @GetMapping("/decision-policy/active")
     public ResponseEntity<DecisionPolicyCacheResponse> getActiveDecisionPolicy() {
         return ResponseEntity.ok(ruleCacheService.getActiveDecisionPolicy());
+    }
+
+    @GetMapping("/blacklist/active")
+    public ResponseEntity<List<ActiveBlacklistResponse>> getActiveBlacklist() {
+        return ResponseEntity.ok(ruleCacheService.getActiveBlacklist());
     }
 
     @PostMapping("/sync")

@@ -19,6 +19,18 @@ public interface NotificationService {
             Pageable pageable
     );
 
+    // Same filters, but page/size nullable: size == null -> returns EVERYTHING (no pagination).
+    Page<NotificationResponse> getNotifications(
+            UUID transactionId,
+            String notificationType,
+            String fraudDecision,
+            String notificationStatus,
+            String alertStatus,
+            String recipient,
+            Integer page,
+            Integer size
+    );
+
     NotificationResponse getNotificationById(UUID notificationId);
 
     Page<NotificationResponse> getNotificationsByTransactionId(UUID transactionId, Pageable pageable);

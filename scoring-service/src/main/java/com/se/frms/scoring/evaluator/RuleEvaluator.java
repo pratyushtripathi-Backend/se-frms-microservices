@@ -29,6 +29,20 @@ public class RuleEvaluator {
             "^\\s*([A-Za-z][A-Za-z0-9_]*)\\s*(>=|<=|!=|==|=|>|<)\\s*(.+?)\\s*$"
     );
 
+    // Used by normalize() so that formatting-only differences (e.g. missing/extra
+    // spaces around a comma, like "Mumbai,India" vs "Mumbai, India" vs
+    // "Mumbai , India") never cause an otherwise-identical value to fail to
+    // match. This matters most for LOCATION blacklist values ("City, Country"),
+    // where the geocoding provider or an admin typing the blacklist entry could
+    // produce slightly different spacing for the same real value - but it applies
+    // to any comma-separated value compared via valuesEqual/normalize, not just
+    // LOCATION. Purely a formatting normalization: it never changes what the
+    // actual value is, only how consistently its spacing is written, so it cannot
+    // make an unrelated value match - it only prevents identical values from
+    // being missed due to spacing differences.
+    private static final Pattern COMMA_SPACING = Pattern.compile("\\s*,\\s*");
+    private static final Pattern EXTRA_WHITESPACE = Pattern.compile("\\s+");
+
     private final ObjectMapper objectMapper;
 
     private final Map<String, BiPredicate<RuleEvaluationRequest, Map<String, Object>>> ruleHandlers = Map.of(
@@ -215,7 +229,12 @@ public class RuleEvaluator {
     }
 
     private String normalize(String value) {
-        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        if (value == null) {
+            return "";
+        }
+        String trimmedUpper = value.trim().toUpperCase(Locale.ROOT);
+        String commaSpacingFixed = COMMA_SPACING.matcher(trimmedUpper).replaceAll(", ");
+        return EXTRA_WHITESPACE.matcher(commaSpacingFixed).replaceAll(" ").trim();
     }
 
     private String toCamelCase(String value) {

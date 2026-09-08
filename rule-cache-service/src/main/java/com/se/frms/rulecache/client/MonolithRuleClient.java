@@ -3,6 +3,7 @@ package com.se.frms.rulecache.client;
 import com.se.frms.rulecache.dto.MonolithApiResponseDTO;
 import com.se.frms.rulecache.dto.DecisionPolicyCacheSyncResponseDTO;
 import com.se.frms.rulecache.dto.RuleCacheSyncResponseDTO;
+import com.se.frms.rulecache.dto.BlacklistCacheSyncResponseDTO;
 
 import lombok.RequiredArgsConstructor;
 
@@ -57,6 +58,46 @@ public class MonolithRuleClient {
 
         if (body == null || !Boolean.TRUE.equals(body.getStatus())) {
             throw new RuntimeException("Failed to fetch active rules from monolith");
+        }
+
+        if (body.getResponseData() == null) {
+            return List.of();
+        }
+
+        return body.getResponseData();
+    }
+
+    public List<BlacklistCacheSyncResponseDTO> fetchActiveBlacklistEntries() {
+
+        String url =
+                monolithBaseUrl
+                        + "/api/v1/internal/rule-cache/active-blacklist-entries";
+
+        HttpHeaders headers =
+                new HttpHeaders();
+
+        headers.set(
+                "X-INTERNAL-API-KEY",
+                internalApiKey
+        );
+
+        HttpEntity<Void> requestEntity =
+                new HttpEntity<>(headers);
+
+        ResponseEntity<MonolithApiResponseDTO<List<BlacklistCacheSyncResponseDTO>>> response =
+                restTemplate.exchange(
+                        url,
+                        HttpMethod.GET,
+                        requestEntity,
+                        new ParameterizedTypeReference<>() {
+                        }
+                );
+
+        MonolithApiResponseDTO<List<BlacklistCacheSyncResponseDTO>> body =
+                response.getBody();
+
+        if (body == null || !Boolean.TRUE.equals(body.getStatus())) {
+            throw new RuntimeException("Failed to fetch active blacklist entries from monolith");
         }
 
         if (body.getResponseData() == null) {

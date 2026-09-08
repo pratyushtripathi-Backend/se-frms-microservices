@@ -32,11 +32,11 @@ public class NotificationController {
             @RequestParam(required = false) String notificationStatus,
             @RequestParam(required = false) String alertStatus,
             @RequestParam(required = false) String recipient,
-            @PageableDefault(size = 20, sort = "createdDate", direction = org.springframework.data.domain.Sort.Direction.DESC)
-            Pageable pageable
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
     ) {
         return ResponseEntity.ok(notificationService.getNotifications(
-                transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient, pageable
+                transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient, page, size
         ));
     }
 

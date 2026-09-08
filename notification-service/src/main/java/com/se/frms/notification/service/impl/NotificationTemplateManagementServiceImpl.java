@@ -60,7 +60,7 @@ public class NotificationTemplateManagementServiceImpl implements NotificationTe
         template.setFraudDecision(decision);
         template.setSubjectTemplate(request.subjectTemplate().trim());
         template.setBodyTemplate(request.bodyTemplate().trim());
-        template.setStatus(request.status());
+        template.setStatus(request.status() != null ? request.status() : Boolean.TRUE);
         template.setCreatedBy(SYSTEM_USER);
         template.setCreatedDate(now);
         template.setUpdatedAt(now);

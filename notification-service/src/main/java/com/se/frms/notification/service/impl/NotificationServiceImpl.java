@@ -11,6 +11,7 @@ import com.se.frms.notification.service.NotificationService;
 import com.se.frms.notification.service.NotificationRecipientCacheService;
 import com.se.frms.notification.service.NotificationTemplateCacheService;
 import com.se.frms.notification.service.SmsSenderService;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import com.se.frms.notification.dto.AdminNotificationRecipient;
 import java.time.LocalDateTime;
 import java.time.Instant;
@@ -23,7 +24,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.TaskScheduler;
@@ -56,6 +60,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final TaskScheduler notificationRetryTaskScheduler;
     @Qualifier("notificationDeliveryExecutor")
     private final Executor notificationDeliveryExecutor;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Value("${notification.email.enabled:false}")
     private boolean emailEnabled;
@@ -115,6 +120,54 @@ public class NotificationServiceImpl implements NotificationService {
             String recipient,
             Pageable pageable
     ) {
+        Specification<Notification> specification = buildSpecification(
+                transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient
+        );
+        return notificationRepository.findAll(specification, pageable).map(this::toResponse);
+    }
+
+    /**
+     * Same filters as above, but page/size are nullable: size == null means the
+     * caller wants EVERYTHING (no pagination) in one response, used by the
+     * frontend "all notifications" table. size provided -> normal paginated response.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Page<NotificationResponse> getNotifications(
+            UUID transactionId,
+            String notificationType,
+            String fraudDecision,
+            String notificationStatus,
+            String alertStatus,
+            String recipient,
+            Integer page,
+            Integer size
+    ) {
+        Specification<Notification> specification = buildSpecification(
+                transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient
+        );
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdDate");
+
+        if (size == null) {
+            List<NotificationResponse> all = notificationRepository.findAll(specification, sort)
+                    .stream()
+                    .map(this::toResponse)
+                    .toList();
+            return new PageImpl<>(all, Pageable.unpaged(), all.size());
+        }
+
+        Pageable pageable = PageRequest.of(page != null ? page : 0, size, sort);
+        return notificationRepository.findAll(specification, pageable).map(this::toResponse);
+    }
+
+    private Specification<Notification> buildSpecification(
+            UUID transactionId,
+            String notificationType,
+            String fraudDecision,
+            String notificationStatus,
+            String alertStatus,
+            String recipient
+    ) {
         Specification<Notification> specification = Specification.where(null);
         if (transactionId != null) {
             specification = specification.and((root, query, cb) -> cb.equal(root.get("transactionId"), transactionId));
@@ -134,7 +187,7 @@ public class NotificationServiceImpl implements NotificationService {
         if (StringUtils.hasText(recipient)) {
             specification = specification.and((root, query, cb) -> cb.equal(root.get("recipient"), recipient));
         }
-        return notificationRepository.findAll(specification, pageable).map(this::toResponse);
+        return specification;
     }
 
     @Override
@@ -195,6 +248,15 @@ public class NotificationServiceImpl implements NotificationService {
         notificationRepository.save(notification);
         log.info("Notification recorded transactionId={}, type={}, status={}",
                 event.transactionId(), type, deliveryStatus);
+
+        // Real-time push for the admin dashboard, in addition to (not instead of) the
+        // existing DB save above - the REST dashboard/feed endpoint is untouched and
+        // still returns the same data for anyone who has not connected over WebSocket.
+        if (DASHBOARD.equals(type)) {
+            messagingTemplate.convertAndSend("/topic/alerts", toResponse(notification));
+            log.info("WebSocket push sent to /topic/alerts, transactionId={}, decision={}, notificationId={}",
+                    event.transactionId(), decision, notification.getId());
+        }
     }
 
     private void sendConfiguredAdminEmails(FraudEvent event, String decision, Map<String, Object> data) {

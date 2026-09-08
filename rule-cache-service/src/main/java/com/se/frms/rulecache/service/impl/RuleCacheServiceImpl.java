@@ -3,12 +3,16 @@ package com.se.frms.rulecache.service.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.se.frms.rulecache.client.MonolithRuleClient;
+import com.se.frms.rulecache.dto.ActiveBlacklistResponse;
 import com.se.frms.rulecache.dto.ActiveRuleResponse;
+import com.se.frms.rulecache.dto.BlacklistCacheSyncResponseDTO;
 import com.se.frms.rulecache.dto.DecisionPolicyCacheResponse;
 import com.se.frms.rulecache.dto.DecisionPolicyCacheSyncResponseDTO;
 import com.se.frms.rulecache.dto.RuleCacheSyncResponseDTO;
+import com.se.frms.rulecache.entity.BlacklistCache;
 import com.se.frms.rulecache.entity.DecisionPolicyCache;
 import com.se.frms.rulecache.entity.RuleCache;
+import com.se.frms.rulecache.repository.BlacklistCacheRepository;
 import com.se.frms.rulecache.repository.DecisionPolicyCacheRepository;
 import com.se.frms.rulecache.repository.RuleCacheRepository;
 import com.se.frms.rulecache.service.RuleCacheService;
@@ -35,6 +39,8 @@ public class RuleCacheServiceImpl implements RuleCacheService {
 
     private final DecisionPolicyCacheRepository decisionPolicyCacheRepository;
 
+    private final BlacklistCacheRepository blacklistCacheRepository;
+
     private final MonolithRuleClient monolithRuleClient;
 
     private final StringRedisTemplate stringRedisTemplate;
@@ -46,6 +52,9 @@ public class RuleCacheServiceImpl implements RuleCacheService {
 
     @Value("${rule-cache.redis.active-decision-policy-key:frms:rule-cache:active-decision-policy}")
     private String activeDecisionPolicyCacheKey;
+
+    @Value("${rule-cache.redis.active-blacklist-key:frms:rule-cache:active-blacklist}")
+    private String activeBlacklistCacheKey;
 
     @Value("${rule-cache.redis.ttl-minutes:10}")
     private Long redisTtlMinutes;
@@ -97,6 +106,30 @@ public class RuleCacheServiceImpl implements RuleCacheService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ActiveBlacklistResponse> getActiveBlacklist() {
+
+        List<ActiveBlacklistResponse> redisBlacklist =
+                getActiveBlacklistFromRedis();
+
+        if (!redisBlacklist.isEmpty()) {
+
+            log.info("Active blacklist fetched from Redis cache");
+
+            return redisBlacklist;
+        }
+
+        List<ActiveBlacklistResponse> dbBlacklist =
+                getActiveBlacklistFromDatabase();
+
+        saveActiveBlacklistToRedis(dbBlacklist);
+
+        log.info("Active blacklist fetched from database and saved to Redis");
+
+        return dbBlacklist;
+    }
+
+    @Override
     @Transactional
     public void syncFromMonolith() {
 
@@ -139,10 +172,42 @@ public class RuleCacheServiceImpl implements RuleCacheService {
             saveActiveDecisionPolicyToRedis(getActiveDecisionPolicyFromDatabase());
         }
 
+        List<BlacklistCacheSyncResponseDTO> activeBlacklistEntries =
+                monolithRuleClient.fetchActiveBlacklistEntries();
+
+        Set<Integer> activeBlacklistIds =
+                activeBlacklistEntries
+                        .stream()
+                        .map(BlacklistCacheSyncResponseDTO::getBlacklistId)
+                        .collect(Collectors.toSet());
+
+        for (BlacklistCacheSyncResponseDTO activeBlacklistEntry : activeBlacklistEntries) {
+            upsertBlacklistEntry(activeBlacklistEntry);
+        }
+
+        List<BlacklistCache> existingActiveBlacklistEntries =
+                blacklistCacheRepository.findByStatusTrue();
+
+        for (BlacklistCache existingBlacklistEntry : existingActiveBlacklistEntries) {
+
+            if (!activeBlacklistIds.contains(existingBlacklistEntry.getBlacklistId())) {
+
+                existingBlacklistEntry.setStatus(false);
+
+                blacklistCacheRepository.save(existingBlacklistEntry);
+            }
+        }
+
+        List<ActiveBlacklistResponse> latestActiveBlacklist =
+                getActiveBlacklistFromDatabase();
+
+        saveActiveBlacklistToRedis(latestActiveBlacklist);
+
         log.info(
-                "Rule cache sync completed, activeRuleCount={}, decisionPolicyId={}",
+                "Rule cache sync completed, activeRuleCount={}, decisionPolicyId={}, activeBlacklistCount={}",
                 activeRules.size(),
-                activeDecisionPolicy != null ? activeDecisionPolicy.getPolicyId() : null
+                activeDecisionPolicy != null ? activeDecisionPolicy.getPolicyId() : null,
+                activeBlacklistEntries.size()
         );
     }
 
@@ -204,6 +269,28 @@ public class RuleCacheServiceImpl implements RuleCacheService {
         decisionPolicyCache.setUpdatedAt(activeDecisionPolicy.getUpdatedAt());
 
         decisionPolicyCacheRepository.save(decisionPolicyCache);
+    }
+
+    private void upsertBlacklistEntry(
+            BlacklistCacheSyncResponseDTO activeBlacklistEntry
+    ) {
+
+        BlacklistCache blacklistCache =
+                blacklistCacheRepository
+                        .findByBlacklistId(activeBlacklistEntry.getBlacklistId())
+                        .orElseGet(BlacklistCache::new);
+
+        blacklistCache.setBlacklistId(activeBlacklistEntry.getBlacklistId());
+        blacklistCache.setType(activeBlacklistEntry.getType());
+        blacklistCache.setValue(activeBlacklistEntry.getValue());
+        blacklistCache.setStatus(true);
+        blacklistCache.setCreatedBy(
+                activeBlacklistEntry.getCreatedBy() == null
+                        ? "SYSTEM"
+                        : activeBlacklistEntry.getCreatedBy()
+        );
+
+        blacklistCacheRepository.save(blacklistCache);
     }
 
     private List<ActiveRuleResponse> getActiveRulesFromDatabase() {
@@ -282,6 +369,45 @@ public class RuleCacheServiceImpl implements RuleCacheService {
         }
     }
 
+    private List<ActiveBlacklistResponse> getActiveBlacklistFromDatabase() {
+
+        return blacklistCacheRepository
+                .findByStatusTrueOrderByUpdatedAtDesc()
+                .stream()
+                .map(this::mapToBlacklistResponse)
+                .toList();
+    }
+
+    private List<ActiveBlacklistResponse> getActiveBlacklistFromRedis() {
+
+        try {
+
+            String cachedBlacklist =
+                    stringRedisTemplate
+                            .opsForValue()
+                            .get(activeBlacklistCacheKey);
+
+            if (cachedBlacklist == null || cachedBlacklist.isBlank()) {
+                return List.of();
+            }
+
+            return objectMapper.readValue(
+                    cachedBlacklist,
+                    new TypeReference<List<ActiveBlacklistResponse>>() {
+                    }
+            );
+
+        } catch (Exception ex) {
+
+            log.warn(
+                    "Failed to read active blacklist from Redis: {}",
+                    ex.getMessage()
+            );
+
+            return List.of();
+        }
+    }
+
     private void saveActiveRulesToRedis(
             List<ActiveRuleResponse> activeRules
     ) {
@@ -338,6 +464,32 @@ public class RuleCacheServiceImpl implements RuleCacheService {
         }
     }
 
+    private void saveActiveBlacklistToRedis(
+            List<ActiveBlacklistResponse> activeBlacklist
+    ) {
+
+        try {
+
+            String blacklistJson =
+                    objectMapper.writeValueAsString(activeBlacklist);
+
+            stringRedisTemplate
+                    .opsForValue()
+                    .set(
+                            activeBlacklistCacheKey,
+                            blacklistJson,
+                            Duration.ofMinutes(redisTtlMinutes)
+                    );
+
+        } catch (Exception ex) {
+
+            log.warn(
+                    "Failed to save active blacklist to Redis: {}",
+                    ex.getMessage()
+            );
+        }
+    }
+
     private ActiveRuleResponse mapToResponse(
             RuleCache ruleCache
     ) {
@@ -377,6 +529,22 @@ public class RuleCacheServiceImpl implements RuleCacheService {
                 decisionPolicyCache.getCreatedBy(),
                 decisionPolicyCache.getCreatedAt(),
                 decisionPolicyCache.getUpdatedAt()
+        );
+    }
+
+    private ActiveBlacklistResponse mapToBlacklistResponse(
+            BlacklistCache blacklistCache
+    ) {
+
+        return new ActiveBlacklistResponse(
+                blacklistCache.getId(),
+                blacklistCache.getBlacklistId(),
+                blacklistCache.getType(),
+                blacklistCache.getValue(),
+                blacklistCache.getStatus(),
+                blacklistCache.getCreatedBy(),
+                blacklistCache.getCreatedDate(),
+                blacklistCache.getUpdatedAt()
         );
     }
 }
