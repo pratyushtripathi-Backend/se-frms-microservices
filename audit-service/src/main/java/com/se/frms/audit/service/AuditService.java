@@ -1,5 +1,6 @@
 package com.se.frms.audit.service;
 import com.se.frms.audit.dto.AuditLogResponse;
+import com.se.frms.audit.dto.AuditTrailDetailResponse;
 import com.se.frms.audit.dto.FraudEvent;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -13,4 +14,6 @@ public interface AuditService {
     AuditLogResponse getById(UUID auditLogId);
 
     Page<AuditLogResponse> getByTransactionId(UUID transactionId, Pageable pageable);
+
+    AuditTrailDetailResponse getTransactionDetails(UUID transactionId);
 }

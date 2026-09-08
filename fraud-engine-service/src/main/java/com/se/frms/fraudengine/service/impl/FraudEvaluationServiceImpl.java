@@ -11,6 +11,7 @@ import com.se.frms.fraudengine.dto.FraudEvaluationRequest;
 import com.se.frms.fraudengine.dto.FraudEvaluationResponse;
 import com.se.frms.fraudengine.dto.ScoringRequest;
 import com.se.frms.fraudengine.dto.ScoringResponse;
+import com.se.frms.fraudengine.filter.CorrelationIdFilter;
 import com.se.frms.fraudengine.producer.FraudEventProducer;
 import com.se.frms.fraudengine.service.FraudEvaluationService;
 import java.time.Instant;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -130,10 +132,10 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
                 decisionId,
                 response.totalRiskScore(),
                 response.finalDecision(),
-                response.decisionReason(),
                 request.transactionData(),
                 triggeredRules,
-                Instant.now()
+                Instant.now(),
+                MDC.get(CorrelationIdFilter.MDC_KEY)
         ));
     }
 

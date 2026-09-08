@@ -1,7 +1,9 @@
 package com.se.frms.decision.controller;
 
+import com.se.frms.decision.dto.CaseResponse;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionResponse;
+import com.se.frms.decision.dto.DecisionReviewRequest;
 import com.se.frms.decision.service.DecisionService;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -9,12 +11,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -56,5 +61,27 @@ public class DecisionController {
                 request.totalRiskScore()
         );
         return ResponseEntity.ok(decisionService.process(request));
+    }
+
+    // GET /api/v1/decisions/cases?status=REVIEW - case-management list (defaults to REVIEW)
+    @GetMapping("/cases")
+    public ResponseEntity<Page<CaseResponse>> getCases(
+            @RequestParam(required = false) String status,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        log.info("GET /api/v1/decisions/cases received status={}, page={}, size={}",
+                status, pageable.getPageNumber(), pageable.getPageSize());
+        return ResponseEntity.ok(decisionService.getCases(status, pageable));
+    }
+
+    // PATCH /api/v1/decisions/{decisionId}/review - admin Allow/Block action
+    @PatchMapping("/{decisionId}/review")
+    public ResponseEntity<DecisionResponse> reviewDecision(
+            @PathVariable UUID decisionId,
+            @Valid @RequestBody DecisionReviewRequest request
+    ) {
+        log.info("PATCH /api/v1/decisions/{}/review received finalDecision={}",
+                decisionId, request.finalDecision());
+        return ResponseEntity.ok(decisionService.reviewDecision(decisionId, request));
     }
 }

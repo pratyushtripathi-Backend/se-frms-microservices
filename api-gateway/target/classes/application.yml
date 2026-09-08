@@ -4,13 +4,233 @@ server:
 spring:
   application:
     name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
   cloud:
     gateway:
       discovery:
         locator:
+          # Services without an explicit route below are still reachable via
+          # /<service-id>/** (lower-cased). Once a service gets an explicit
+          # route entry, that route takes precedence for its path.
           enabled: true
           lower-case-service-id: true
-      routes: []
+      httpclient:
+        connect-timeout: 3000
+        response-timeout: 5s
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authServiceCircuitBreaker
+                fallbackUri: forward:/fallback/auth
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+
+        - id: transaction-service
+          uri: lb://transaction-service
+          predicates:
+            - Path=/api/v1/transactions/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: transactionServiceCircuitBreaker
+                fallbackUri: forward:/fallback/transactions
+            - name: Retry
+              args:
+                retries: 3
+                series:
+                  - SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1000ms
+                  factor: 2
+                  basedOnPreviousValue: false
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+
+        - id: fraud-engine-service
+          uri: lb://fraud-engine-service
+          predicates:
+            - Path=/api/v1/fraud-evaluations/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 15
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: fraudEngineServiceCircuitBreaker
+                fallbackUri: forward:/fallback/fraud-evaluations
+            - name: Retry
+              args:
+                retries: 2
+                series:
+                  - SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1000ms
+                  factor: 2
+                  basedOnPreviousValue: false
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+
+        - id: scoring-service
+          uri: lb://scoring-service
+          predicates:
+            - Path=/api/v1/scoring/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 25
+                redis-rate-limiter.burstCapacity: 50
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: scoringServiceCircuitBreaker
+                fallbackUri: forward:/fallback/scoring
+            - name: Retry
+              args:
+                retries: 3
+                series:
+                  - SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1000ms
+                  factor: 2
+                  basedOnPreviousValue: false
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+
+        - id: decision-service
+          uri: lb://decision-service
+          predicates:
+            - Path=/api/v1/decisions/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: decisionServiceCircuitBreaker
+                fallbackUri: forward:/fallback/decisions
+            - name: Retry
+              args:
+                retries: 3
+                series:
+                  - SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1000ms
+                  factor: 2
+                  basedOnPreviousValue: false
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+
+        - id: audit-service
+          uri: lb://audit-service
+          predicates:
+            - Path=/api/v1/audit-logs/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: auditServiceCircuitBreaker
+                fallbackUri: forward:/fallback/audit-logs
+            - name: Retry
+              args:
+                retries: 3
+                series:
+                  - SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1000ms
+                  factor: 2
+                  basedOnPreviousValue: false
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+
+        # Two controllers (notifications + notification-templates) live in
+        # notification-service; one route with both path patterns covers
+        # both, same as every other route pointing at a single lb:// target.
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/v1/notifications/**,/api/v1/notification-templates/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: notificationServiceCircuitBreaker
+                fallbackUri: forward:/fallback/notifications
+            - name: Retry
+              args:
+                retries: 3
+                series:
+                  - SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1000ms
+                  factor: 2
+                  basedOnPreviousValue: false
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+
+        - id: analytics-service
+          uri: lb://analytics-service
+          predicates:
+            - Path=/api/v1/analytics/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: analyticsServiceCircuitBreaker
+                fallbackUri: forward:/fallback/analytics
+            - name: Retry
+              args:
+                retries: 3
+                series:
+                  - SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1000ms
+                  factor: 2
+                  basedOnPreviousValue: false
+            - AddRequestHeader=X-Gateway-Source, api-gateway
 
 eureka:
   client:
@@ -22,11 +242,132 @@ eureka:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${server.port}
 
+resilience4j:
+  circuitbreaker:
+    instances:
+      transactionServiceCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      authServiceCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      fraudEngineServiceCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 15s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      scoringServiceCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      decisionServiceCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      auditServiceCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      notificationServiceCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      analyticsServiceCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  timelimiter:
+    instances:
+      transactionServiceCircuitBreaker:
+        timeoutDuration: 5s
+      authServiceCircuitBreaker:
+        timeoutDuration: 3s
+      fraudEngineServiceCircuitBreaker:
+        # Fraud evaluation calls out to rule-cache/scoring/decision itself,
+        # so it gets a longer budget than a simple CRUD route.
+        timeoutDuration: 8s
+      scoringServiceCircuitBreaker:
+        # Scoring-service is a pure in-memory calculator with no outbound
+        # calls of its own, so it gets a short budget.
+        timeoutDuration: 3s
+      decisionServiceCircuitBreaker:
+        # Read endpoints hit Postgres (paged getAll included), so it gets
+        # the same budget as transaction-service's CRUD route.
+        timeoutDuration: 5s
+      auditServiceCircuitBreaker:
+        timeoutDuration: 5s
+      notificationServiceCircuitBreaker:
+        timeoutDuration: 5s
+      analyticsServiceCircuitBreaker:
+        # Summary/rule-performance endpoints aggregate across rows, so a
+        # slightly longer budget than a simple CRUD read.
+        timeoutDuration: 6s
+
+frms:
+  security:
+    jwt:
+      # JWT/login-based auth is OFF: this gateway fronts bank engine-to-engine
+      # traffic, not user logins, and access is meant to be controlled by
+      # caller IP once that's configured (see RemoteAddr predicates below,
+      # to be added per-route once a bank's IP/range is known). Flip this to
+      # true to re-enable JwtAuthenticationFilter without any code changes.
+      enabled: ${JWT_AUTH_ENABLED:false}
+      # Overridable via JWT_SECRET env var. Must match auth-service's secret.
+      # Use a real secrets manager (Vault/AWS Secrets Manager) in production.
+      secret: ${JWT_SECRET:frms-enterprise-gateway-shared-secret-change-me-32-bytes-min}
+    # Requests to these paths bypass JWT validation at the gateway (only
+    # relevant when frms.security.jwt.enabled=true).
+    public-paths:
+      - /api/v1/auth/login
+      - /actuator/**
+      - /fallback/**
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
+        include: health,info,gateway,circuitbreakers,circuitbreakerevents,prometheus
   endpoint:
     health:
       show-details: always
@@ -35,6 +376,9 @@ management:
   info:
     env:
       enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 info:
   app:
@@ -49,4 +393,4 @@ logging:
     org.springframework.cloud.gateway: INFO
     com.netflix.discovery: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] [%X{requestId}] %logger{36} - %msg%n"

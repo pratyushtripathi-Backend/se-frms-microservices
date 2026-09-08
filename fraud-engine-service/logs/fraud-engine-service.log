@@ -1,0 +1,12 @@
+2026-09-08T00:32:06.695+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-08T00:32:07.357+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-08T00:32:07.357+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-08T10:15:22.410+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-08T10:15:22.650+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-08T10:15:22.650+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-08T10:15:53.860+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-08T10:15:55.000+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-08T10:15:55.000+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-08T10:16:25.003+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-08T10:16:25.041+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-08T10:16:25.041+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9

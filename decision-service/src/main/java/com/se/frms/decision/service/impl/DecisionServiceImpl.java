@@ -1,14 +1,22 @@
 package com.se.frms.decision.service.impl;
 
 import com.se.frms.decision.cache.DecisionPolicyCache;
+import com.se.frms.decision.client.ScoringLookupClient;
+import com.se.frms.decision.client.TransactionLookupClient;
+import com.se.frms.decision.dto.CaseResponse;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionPolicyResponse;
 import com.se.frms.decision.dto.DecisionResponse;
+import com.se.frms.decision.dto.DecisionReviewRequest;
+import com.se.frms.decision.dto.ScoringLookupResponse;
+import com.se.frms.decision.dto.TransactionLookupResponse;
 import com.se.frms.decision.entity.Decision;
+import com.se.frms.decision.exception.ExternalServiceException;
 import com.se.frms.decision.repository.DecisionRepository;
 import com.se.frms.decision.service.DecisionPersistenceService;
 import com.se.frms.decision.service.DecisionService;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +41,8 @@ public class DecisionServiceImpl implements DecisionService {
 
     private final DecisionPolicyCache decisionPolicyCache;
     private final DecisionPersistenceService decisionPersistenceService;
+    private final ScoringLookupClient scoringLookupClient;
+    private final TransactionLookupClient transactionLookupClient;
 
     @Value("${decision.threshold.allow-max:39}")
     private Integer allowMaxScore;
@@ -111,6 +121,90 @@ public class DecisionServiceImpl implements DecisionService {
                         HttpStatus.NOT_FOUND,
                         "Decision not found for transactionId: " + transactionId
                 ));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<CaseResponse> getCases(String status, Pageable pageable) {
+        String filterStatus = (status == null || status.isBlank()) ? REVIEW : status.trim().toUpperCase();
+        log.info("Fetching case-management list status={}, page={}, size={}",
+                filterStatus, pageable.getPageNumber(), pageable.getPageSize());
+        return decisionRepository.findByFinalDecision(filterStatus, pageable).map(this::mapToCaseResponse);
+    }
+
+    @Override
+    @Transactional
+    public DecisionResponse reviewDecision(UUID decisionId, DecisionReviewRequest request) {
+        String requested = request.finalDecision() == null ? null : request.finalDecision().trim().toUpperCase();
+        if (!ALLOW.equals(requested) && !BLOCK.equals(requested)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "finalDecision must be ALLOW or BLOCK");
+        }
+
+        Decision decision = decisionRepository.findById(decisionId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Decision not found: " + decisionId
+                ));
+
+        String previousDecision = decision.getFinalDecision();
+        decision.setFinalDecision(requested);
+        if (request.remarks() != null && !request.remarks().isBlank()) {
+            decision.setDecisionReason(request.remarks());
+        }
+        Decision saved = decisionRepository.save(decision);
+
+        log.info(
+                "Decision manually reviewed decisionId={}, transactionId={}, previousDecision={}, newDecision={}",
+                saved.getId(),
+                saved.getTransactionId(),
+                previousDecision,
+                saved.getFinalDecision()
+        );
+
+        return mapToResponse(saved);
+    }
+
+    private CaseResponse mapToCaseResponse(Decision decision) {
+        // Best-effort enrichment: if scoring-service or transaction-service is
+        // unreachable, the row still comes back with whatever decision-service
+        // already has locally rather than failing the whole list.
+        List<ScoringLookupResponse.MatchedRuleInfo> matchedRules = List.of();
+        try {
+            ScoringLookupResponse scoring = scoringLookupClient.getByScoringId(decision.getScoringId());
+            if (scoring != null && scoring.matchedRules() != null) {
+                matchedRules = scoring.matchedRules();
+            }
+        } catch (ExternalServiceException ex) {
+            log.warn("Matched-rule detail unavailable for decisionId={}, scoringId={}",
+                    decision.getId(), decision.getScoringId());
+        }
+
+        java.math.BigDecimal amount = null;
+        String mode = null;
+        try {
+            TransactionLookupResponse transaction =
+                    transactionLookupClient.getByTransactionId(decision.getTransactionId());
+            if (transaction != null) {
+                amount = transaction.amount();
+                mode = transaction.channel();
+            }
+        } catch (ExternalServiceException ex) {
+            log.warn("Transaction detail unavailable for decisionId={}, transactionId={}",
+                    decision.getId(), decision.getTransactionId());
+        }
+
+        return new CaseResponse(
+                decision.getId(),
+                decision.getTransactionId(),
+                amount,
+                mode,
+                decision.getTotalRiskScore(),
+                matchedRules,
+                decision.getFinalDecision(),
+                decision.getDecisionReason(),
+                decision.getCreatedAt(),
+                decision.getUpdatedAt()
+        );
     }
 
     private String resolveDecision(Integer totalRiskScore, DecisionPolicyResponse activePolicy) {

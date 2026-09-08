@@ -13,6 +13,7 @@ public record FraudEvent(
         String decisionReason,
         Map<String, Object> transactionData,
         Map<String, Object> triggeredRules,
-        Instant occurredAt
+        Instant occurredAt,
+        String correlationId
 ) {
 }
