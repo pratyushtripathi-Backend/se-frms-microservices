@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile default="true" name="Default" enabled="true" />
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="auth-service" />
+        <module name="rule-cache-service" />
+        <module name="decision-service" />
+        <module name="audit-service" />
+        <module name="fraud-engine-service" />
+        <module name="api-gateway" />
+        <module name="analytics-service" />
+        <module name="transaction-service" />
+        <module name="service-registry" />
+        <module name="notification-service" />
+      </profile>
+      <profile name="Annotation profile for scoring-service" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.40/lombok-1.18.40.jar" />
+        </processorPath>
+        <module name="scoring-service" />
+      </profile>
+    </annotationProcessing>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="analytics-service" options="-parameters" />
+      <module name="api-gateway" options="-parameters" />
+      <module name="audit-service" options="-parameters" />
+      <module name="auth-service" options="-parameters" />
+      <module name="decision-service" options="-parameters" />
+      <module name="fraud-engine-service" options="-parameters" />
+      <module name="notification-service" options="-parameters" />
+      <module name="rule-cache-service" options="-parameters" />
+      <module name="scoring-service" options="-parameters" />
+      <module name="service-registry" options="-parameters" />
+      <module name="transaction-service" options="-parameters" />
+    </option>
+  </component>
+</project>

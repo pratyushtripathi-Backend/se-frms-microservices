@@ -3,7 +3,6 @@ package com.se.frms.fraudengine.client;
 import com.se.frms.fraudengine.dto.ScoringRequest;
 import com.se.frms.fraudengine.dto.ScoringResponse;
 import com.se.frms.fraudengine.exception.ExternalServiceException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -12,13 +11,10 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class ScoringClient {
 
-    @Qualifier("restClientBuilder")
     private final RestClient.Builder restClientBuilder;
-    @Qualifier("directRestClientBuilder")
     private final RestClient.Builder directRestClientBuilder;
 
     @Value("${frms.scoring.base-url}")
@@ -26,6 +22,12 @@ public class ScoringClient {
 
     @Value("${frms.scoring.path}")
     private String scoringPath;
+
+    public ScoringClient(@Qualifier("restClientBuilder") RestClient.Builder restClientBuilder,
+                         @Qualifier("directRestClientBuilder") RestClient.Builder directRestClientBuilder) {
+        this.restClientBuilder = restClientBuilder;
+        this.directRestClientBuilder = directRestClientBuilder;
+    }
 
     public ScoringResponse score(ScoringRequest request) {
         log.info("Calling Scoring Service for transactionId={}", request.transactionId());

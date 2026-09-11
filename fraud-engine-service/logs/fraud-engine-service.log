@@ -31,3 +31,577 @@
 2026-09-11T10:32:16.914+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
 2026-09-11T10:32:16.940+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
 2026-09-11T10:32:16.942+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-11T14:52:00.641+05:30  INFO 20836 --- [fraud-engine-service] [main] c.s.f.f.FraudEngineServiceApplication    : Starting FraudEngineServiceApplication using Java 17.0.20 with PID 20836 (D:\Se_Frms_Backend_Microservice\se-frms-microservices\fraud-engine-service\target\classes started by hp in D:\Se_Frms_Backend_Microservice\se-frms-microservices\fraud-engine-service)
+2026-09-11T14:52:00.654+05:30  INFO 20836 --- [fraud-engine-service] [main] c.s.f.f.FraudEngineServiceApplication    : No active profile set, falling back to 1 default profile: "default"
+2026-09-11T14:52:04.371+05:30  INFO 20836 --- [fraud-engine-service] [main] o.s.cloud.context.scope.GenericScope     : BeanFactory id=3b2ea44a-01a3-335e-989c-952ab2eead20
+2026-09-11T14:52:05.544+05:30  INFO 20836 --- [fraud-engine-service] [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8092 (http)
+2026-09-11T14:52:05.579+05:30  INFO 20836 --- [fraud-engine-service] [main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-09-11T14:52:05.580+05:30  INFO 20836 --- [fraud-engine-service] [main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.33]
+2026-09-11T14:52:05.894+05:30  INFO 20836 --- [fraud-engine-service] [main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-09-11T14:52:05.897+05:30  INFO 20836 --- [fraud-engine-service] [main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 5080 ms
+2026-09-11T14:52:06.819+05:30  INFO 20836 --- [fraud-engine-service] [main] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:52:07.541+05:30 ERROR 20836 --- [fraud-engine-service] [main] c.s.f.f.client.BlacklistCacheClient      : Rule Cache blacklist call failed
+
+org.springframework.web.client.ResourceAccessException: I/O error on GET request for "http://localhost:8093/api/v1/rules/blacklist/active": Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.createResourceAccessException(DefaultRestClient.java:588) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:502) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.retrieve(DefaultRestClient.java:458) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.client.BlacklistCacheClient.getActiveBlacklist(BlacklistCacheClient.java:39) ~[classes/:na]
+	at com.se.frms.fraudengine.cache.ActiveBlacklistCache.refresh(ActiveBlacklistCache.java:28) ~[classes/:na]
+	at com.se.frms.fraudengine.cache.ActiveBlacklistCache.warmUp(ActiveBlacklistCache.java:22) ~[classes/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMethod.invoke(InitDestroyAnnotationBeanPostProcessor.java:457) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMetadata.invokeInitMethods(InitDestroyAnnotationBeanPostProcessor.java:401) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:219) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyBeanPostProcessorsBeforeInitialization(AbstractAutowireCapableBeanFactory.java:422) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1798) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:522) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:337) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:335) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:200) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:975) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:971) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:625) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:754) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:456) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:335) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1363) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1352) ~[spring-boot-3.2.12.jar:3.2.12]
+	at com.se.frms.fraudengine.FraudEngineServiceApplication.main(FraudEngineServiceApplication.java:13) ~[classes/:na]
+Caused by: org.apache.hc.client5.http.HttpHostConnectException: Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method) ~[na:na]
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:684) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:547) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:602) ~[na:na]
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327) ~[na:na]
+	at java.base/java.net.Socket.connect(Socket.java:633) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.lambda$connectSocket$0(PlainConnectionSocketFactory.java:91) ~[httpclient5-5.2.3.jar:5.2.3]
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:569) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.connectSocket(PlainConnectionSocketFactory.java:90) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.socket.ConnectionSocketFactory.connectSocket(ConnectionSocketFactory.java:123) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.DefaultHttpClientConnectionOperator.connect(DefaultHttpClientConnectionOperator.java:184) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager.connect(PoolingHttpClientConnectionManager.java:447) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:162) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:172) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ConnectExec.execute(ConnectExec.java:142) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ProtocolExec.execute(ProtocolExec.java:192) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.HttpRequestRetryExec.execute(HttpRequestRetryExec.java:96) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ContentCompressionExec.execute(ContentCompressionExec.java:152) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.RedirectExec.execute(RedirectExec.java:115) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalHttpClient.doExecute(InternalHttpClient.java:170) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:87) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:55) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.classic.HttpClient.executeOpen(HttpClient.java:183) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.springframework.http.client.HttpComponentsClientHttpRequest.executeInternal(HttpComponentsClientHttpRequest.java:99) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractStreamingClientHttpRequest.executeInternal(AbstractStreamingClientHttpRequest.java:70) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:112) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.config.CorrelationIdRequestInterceptor.intercept(CorrelationIdRequestInterceptor.java:31) ~[classes/:na]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:88) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest.executeInternal(InterceptingClientHttpRequest.java:72) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractBufferingClientHttpRequest.executeInternal(AbstractBufferingClientHttpRequest.java:48) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:496) ~[spring-web-6.1.15.jar:6.1.15]
+	... 29 common frames omitted
+
+2026-09-11T14:52:07.573+05:30  WARN 20836 --- [fraud-engine-service] [main] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refresh failed. Keeping existing entryCount=0, reason=Unable to fetch active blacklist from Rule Cache
+2026-09-11T14:52:07.924+05:30  INFO 20836 --- [fraud-engine-service] [main] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:52:07.938+05:30 ERROR 20836 --- [fraud-engine-service] [main] c.s.f.f.client.RuleCacheClient           : Rule Cache call failed
+
+org.springframework.web.client.ResourceAccessException: I/O error on GET request for "http://localhost:8093/api/v1/rules/active": Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.createResourceAccessException(DefaultRestClient.java:588) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:502) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.retrieve(DefaultRestClient.java:458) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.client.RuleCacheClient.getActiveRules(RuleCacheClient.java:39) ~[classes/:na]
+	at com.se.frms.fraudengine.cache.ActiveRuleCache.refresh(ActiveRuleCache.java:28) ~[classes/:na]
+	at com.se.frms.fraudengine.cache.ActiveRuleCache.warmUp(ActiveRuleCache.java:22) ~[classes/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMethod.invoke(InitDestroyAnnotationBeanPostProcessor.java:457) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMetadata.invokeInitMethods(InitDestroyAnnotationBeanPostProcessor.java:401) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:219) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyBeanPostProcessorsBeforeInitialization(AbstractAutowireCapableBeanFactory.java:422) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1798) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:522) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:337) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:335) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:200) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:975) ~[spring-beans-6.1.15.jar:6.1.15]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:971) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:625) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:754) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:456) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:335) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1363) ~[spring-boot-3.2.12.jar:3.2.12]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1352) ~[spring-boot-3.2.12.jar:3.2.12]
+	at com.se.frms.fraudengine.FraudEngineServiceApplication.main(FraudEngineServiceApplication.java:13) ~[classes/:na]
+Caused by: org.apache.hc.client5.http.HttpHostConnectException: Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method) ~[na:na]
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:684) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:547) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:602) ~[na:na]
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327) ~[na:na]
+	at java.base/java.net.Socket.connect(Socket.java:633) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.lambda$connectSocket$0(PlainConnectionSocketFactory.java:91) ~[httpclient5-5.2.3.jar:5.2.3]
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:569) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.connectSocket(PlainConnectionSocketFactory.java:90) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.socket.ConnectionSocketFactory.connectSocket(ConnectionSocketFactory.java:123) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.DefaultHttpClientConnectionOperator.connect(DefaultHttpClientConnectionOperator.java:184) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager.connect(PoolingHttpClientConnectionManager.java:447) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:162) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:172) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ConnectExec.execute(ConnectExec.java:142) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ProtocolExec.execute(ProtocolExec.java:192) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.HttpRequestRetryExec.execute(HttpRequestRetryExec.java:96) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ContentCompressionExec.execute(ContentCompressionExec.java:152) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.RedirectExec.execute(RedirectExec.java:115) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalHttpClient.doExecute(InternalHttpClient.java:170) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:87) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:55) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.classic.HttpClient.executeOpen(HttpClient.java:183) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.springframework.http.client.HttpComponentsClientHttpRequest.executeInternal(HttpComponentsClientHttpRequest.java:99) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractStreamingClientHttpRequest.executeInternal(AbstractStreamingClientHttpRequest.java:70) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:112) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.config.CorrelationIdRequestInterceptor.intercept(CorrelationIdRequestInterceptor.java:31) ~[classes/:na]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:88) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest.executeInternal(InterceptingClientHttpRequest.java:72) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractBufferingClientHttpRequest.executeInternal(AbstractBufferingClientHttpRequest.java:48) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:496) ~[spring-web-6.1.15.jar:6.1.15]
+	... 29 common frames omitted
+
+2026-09-11T14:52:07.943+05:30  WARN 20836 --- [fraud-engine-service] [main] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refresh failed. Keeping existing ruleCount=0, reason=Unable to fetch active rules from Rule Cache
+2026-09-11T14:52:21.174+05:30  INFO 20836 --- [fraud-engine-service] [main] DiscoveryClientOptionalArgsConfiguration : Eureka HTTP Client uses RestTemplate.
+2026-09-11T14:52:21.427+05:30  WARN 20836 --- [fraud-engine-service] [main] iguration$LoadBalancerCaffeineWarnLogger : Spring Cloud LoadBalancer is currently working with the default cache. While this cache implementation is useful for development and tests, it's recommended to use Caffeine cache in production.You can switch to using Caffeine cache, by adding it and org.springframework.cache.caffeine.CaffeineCacheManager to the classpath.
+2026-09-11T14:52:21.451+05:30  INFO 20836 --- [fraud-engine-service] [main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoint(s) beneath base path '/actuator'
+2026-09-11T14:52:21.708+05:30  INFO 20836 --- [fraud-engine-service] [main] o.s.c.n.eureka.InstanceInfoFactory       : Setting initial instance status as: STARTING
+2026-09-11T14:52:21.776+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Initializing Eureka in region us-east-1
+2026-09-11T14:52:21.789+05:30  INFO 20836 --- [fraud-engine-service] [main] c.n.d.s.r.aws.ConfigClusterResolver      : Resolving eureka endpoints via configuration
+2026-09-11T14:52:21.812+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Disable delta property : false
+2026-09-11T14:52:21.812+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Single vip registry refresh property : null
+2026-09-11T14:52:21.812+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Force full registry fetch : false
+2026-09-11T14:52:21.812+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Application is null : false
+2026-09-11T14:52:21.812+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Registered Applications size is zero : true
+2026-09-11T14:52:21.813+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Application version is -1: true
+2026-09-11T14:52:21.813+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Getting all instance registry info from the eureka server
+2026-09-11T14:52:22.253+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : The response status is 200
+2026-09-11T14:52:22.257+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Starting heartbeat executor: renew interval is: 30
+2026-09-11T14:52:22.262+05:30  INFO 20836 --- [fraud-engine-service] [main] c.n.discovery.InstanceInfoReplicator     : InstanceInfoReplicator onDemand update allowed rate per min is 4
+2026-09-11T14:52:22.266+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Discovery Client initialized at timestamp 1789118542264 with initial instances count: 3
+2026-09-11T14:52:22.272+05:30  INFO 20836 --- [fraud-engine-service] [main] o.s.c.n.e.s.EurekaServiceRegistry        : Registering application FRAUD-ENGINE-SERVICE with eureka with status UP
+2026-09-11T14:52:22.273+05:30  INFO 20836 --- [fraud-engine-service] [main] com.netflix.discovery.DiscoveryClient    : Saw local status change event StatusChangeEvent [timestamp=1789118542273, current=UP, previous=STARTING]
+2026-09-11T14:52:22.277+05:30  INFO 20836 --- [fraud-engine-service] [DiscoveryClient-InstanceInfoReplicator-%d] com.netflix.discovery.DiscoveryClient    : DiscoveryClient_FRAUD-ENGINE-SERVICE/fraud-engine-service:8092: registering service...
+2026-09-11T14:52:22.340+05:30  INFO 20836 --- [fraud-engine-service] [main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8092 (http) with context path ''
+2026-09-11T14:52:22.343+05:30  INFO 20836 --- [fraud-engine-service] [main] .s.c.n.e.s.EurekaAutoServiceRegistration : Updating port to 8092
+2026-09-11T14:52:22.375+05:30  INFO 20836 --- [fraud-engine-service] [DiscoveryClient-InstanceInfoReplicator-%d] com.netflix.discovery.DiscoveryClient    : DiscoveryClient_FRAUD-ENGINE-SERVICE/fraud-engine-service:8092 - registration status: 204
+2026-09-11T14:52:22.857+05:30  INFO 20836 --- [fraud-engine-service] [main] c.s.f.f.FraudEngineServiceApplication    : Started FraudEngineServiceApplication in 25.651 seconds (process running for 27.724)
+2026-09-11T14:52:22.857+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:52:22.887+05:30 ERROR 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Rule Cache blacklist call failed
+
+org.springframework.web.client.ResourceAccessException: I/O error on GET request for "http://localhost:8093/api/v1/rules/blacklist/active": Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.createResourceAccessException(DefaultRestClient.java:588) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:502) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.retrieve(DefaultRestClient.java:458) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.client.BlacklistCacheClient.getActiveBlacklist(BlacklistCacheClient.java:39) ~[classes/:na]
+	at com.se.frms.fraudengine.cache.ActiveBlacklistCache.refresh(ActiveBlacklistCache.java:28) ~[classes/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.1.15.jar:6.1.15]
+	at io.micrometer.observation.Observation.observe(Observation.java:499) ~[micrometer-observation-1.12.13.jar:1.12.13]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.1.15.jar:6.1.15]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
+Caused by: org.apache.hc.client5.http.HttpHostConnectException: Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method) ~[na:na]
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:684) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:547) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:602) ~[na:na]
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327) ~[na:na]
+	at java.base/java.net.Socket.connect(Socket.java:633) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.lambda$connectSocket$0(PlainConnectionSocketFactory.java:91) ~[httpclient5-5.2.3.jar:5.2.3]
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:569) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.connectSocket(PlainConnectionSocketFactory.java:90) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.socket.ConnectionSocketFactory.connectSocket(ConnectionSocketFactory.java:123) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.DefaultHttpClientConnectionOperator.connect(DefaultHttpClientConnectionOperator.java:184) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager.connect(PoolingHttpClientConnectionManager.java:447) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:162) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:172) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ConnectExec.execute(ConnectExec.java:142) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ProtocolExec.execute(ProtocolExec.java:192) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.HttpRequestRetryExec.execute(HttpRequestRetryExec.java:96) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ContentCompressionExec.execute(ContentCompressionExec.java:152) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.RedirectExec.execute(RedirectExec.java:115) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalHttpClient.doExecute(InternalHttpClient.java:170) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:87) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:55) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.classic.HttpClient.executeOpen(HttpClient.java:183) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.springframework.http.client.HttpComponentsClientHttpRequest.executeInternal(HttpComponentsClientHttpRequest.java:99) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractStreamingClientHttpRequest.executeInternal(AbstractStreamingClientHttpRequest.java:70) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:112) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.config.CorrelationIdRequestInterceptor.intercept(CorrelationIdRequestInterceptor.java:31) ~[classes/:na]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:88) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest.executeInternal(InterceptingClientHttpRequest.java:72) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractBufferingClientHttpRequest.executeInternal(AbstractBufferingClientHttpRequest.java:48) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:496) ~[spring-web-6.1.15.jar:6.1.15]
+	... 18 common frames omitted
+
+2026-09-11T14:52:22.889+05:30  WARN 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refresh failed. Keeping existing entryCount=0, reason=Unable to fetch active blacklist from Rule Cache
+2026-09-11T14:52:22.891+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:52:22.932+05:30 ERROR 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Rule Cache call failed
+
+org.springframework.web.client.ResourceAccessException: I/O error on GET request for "http://localhost:8093/api/v1/rules/active": Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.createResourceAccessException(DefaultRestClient.java:588) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:502) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.retrieve(DefaultRestClient.java:458) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.client.RuleCacheClient.getActiveRules(RuleCacheClient.java:39) ~[classes/:na]
+	at com.se.frms.fraudengine.cache.ActiveRuleCache.refresh(ActiveRuleCache.java:28) ~[classes/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.1.15.jar:6.1.15]
+	at io.micrometer.observation.Observation.observe(Observation.java:499) ~[micrometer-observation-1.12.13.jar:1.12.13]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.1.15.jar:6.1.15]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
+Caused by: org.apache.hc.client5.http.HttpHostConnectException: Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method) ~[na:na]
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:684) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:547) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:602) ~[na:na]
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327) ~[na:na]
+	at java.base/java.net.Socket.connect(Socket.java:633) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.lambda$connectSocket$0(PlainConnectionSocketFactory.java:91) ~[httpclient5-5.2.3.jar:5.2.3]
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:569) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.connectSocket(PlainConnectionSocketFactory.java:90) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.socket.ConnectionSocketFactory.connectSocket(ConnectionSocketFactory.java:123) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.DefaultHttpClientConnectionOperator.connect(DefaultHttpClientConnectionOperator.java:184) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager.connect(PoolingHttpClientConnectionManager.java:447) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:162) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:172) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ConnectExec.execute(ConnectExec.java:142) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ProtocolExec.execute(ProtocolExec.java:192) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.HttpRequestRetryExec.execute(HttpRequestRetryExec.java:96) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ContentCompressionExec.execute(ContentCompressionExec.java:152) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.RedirectExec.execute(RedirectExec.java:115) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalHttpClient.doExecute(InternalHttpClient.java:170) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:87) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:55) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.classic.HttpClient.executeOpen(HttpClient.java:183) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.springframework.http.client.HttpComponentsClientHttpRequest.executeInternal(HttpComponentsClientHttpRequest.java:99) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractStreamingClientHttpRequest.executeInternal(AbstractStreamingClientHttpRequest.java:70) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:112) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.config.CorrelationIdRequestInterceptor.intercept(CorrelationIdRequestInterceptor.java:31) ~[classes/:na]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:88) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest.executeInternal(InterceptingClientHttpRequest.java:72) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractBufferingClientHttpRequest.executeInternal(AbstractBufferingClientHttpRequest.java:48) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:496) ~[spring-web-6.1.15.jar:6.1.15]
+	... 18 common frames omitted
+
+2026-09-11T14:52:22.935+05:30  WARN 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refresh failed. Keeping existing ruleCount=0, reason=Unable to fetch active rules from Rule Cache
+2026-09-11T14:52:52.892+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:52:52.924+05:30 ERROR 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Rule Cache blacklist call failed
+
+org.springframework.web.client.ResourceAccessException: I/O error on GET request for "http://localhost:8093/api/v1/rules/blacklist/active": Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.createResourceAccessException(DefaultRestClient.java:588) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:502) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.retrieve(DefaultRestClient.java:458) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.client.BlacklistCacheClient.getActiveBlacklist(BlacklistCacheClient.java:39) ~[classes/:na]
+	at com.se.frms.fraudengine.cache.ActiveBlacklistCache.refresh(ActiveBlacklistCache.java:28) ~[classes/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.1.15.jar:6.1.15]
+	at io.micrometer.observation.Observation.observe(Observation.java:499) ~[micrometer-observation-1.12.13.jar:1.12.13]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.1.15.jar:6.1.15]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
+Caused by: org.apache.hc.client5.http.HttpHostConnectException: Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method) ~[na:na]
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:684) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:547) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:602) ~[na:na]
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327) ~[na:na]
+	at java.base/java.net.Socket.connect(Socket.java:633) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.lambda$connectSocket$0(PlainConnectionSocketFactory.java:91) ~[httpclient5-5.2.3.jar:5.2.3]
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:569) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.connectSocket(PlainConnectionSocketFactory.java:90) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.socket.ConnectionSocketFactory.connectSocket(ConnectionSocketFactory.java:123) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.DefaultHttpClientConnectionOperator.connect(DefaultHttpClientConnectionOperator.java:184) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager.connect(PoolingHttpClientConnectionManager.java:447) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:162) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:172) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ConnectExec.execute(ConnectExec.java:142) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ProtocolExec.execute(ProtocolExec.java:192) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.HttpRequestRetryExec.execute(HttpRequestRetryExec.java:96) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ContentCompressionExec.execute(ContentCompressionExec.java:152) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.RedirectExec.execute(RedirectExec.java:115) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalHttpClient.doExecute(InternalHttpClient.java:170) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:87) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:55) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.classic.HttpClient.executeOpen(HttpClient.java:183) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.springframework.http.client.HttpComponentsClientHttpRequest.executeInternal(HttpComponentsClientHttpRequest.java:99) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractStreamingClientHttpRequest.executeInternal(AbstractStreamingClientHttpRequest.java:70) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:112) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.config.CorrelationIdRequestInterceptor.intercept(CorrelationIdRequestInterceptor.java:31) ~[classes/:na]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:88) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest.executeInternal(InterceptingClientHttpRequest.java:72) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractBufferingClientHttpRequest.executeInternal(AbstractBufferingClientHttpRequest.java:48) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:496) ~[spring-web-6.1.15.jar:6.1.15]
+	... 18 common frames omitted
+
+2026-09-11T14:52:52.927+05:30  WARN 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refresh failed. Keeping existing entryCount=0, reason=Unable to fetch active blacklist from Rule Cache
+2026-09-11T14:52:52.939+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:52:52.947+05:30 ERROR 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Rule Cache call failed
+
+org.springframework.web.client.ResourceAccessException: I/O error on GET request for "http://localhost:8093/api/v1/rules/active": Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.createResourceAccessException(DefaultRestClient.java:588) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:502) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.retrieve(DefaultRestClient.java:458) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.client.RuleCacheClient.getActiveRules(RuleCacheClient.java:39) ~[classes/:na]
+	at com.se.frms.fraudengine.cache.ActiveRuleCache.refresh(ActiveRuleCache.java:28) ~[classes/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.1.15.jar:6.1.15]
+	at io.micrometer.observation.Observation.observe(Observation.java:499) ~[micrometer-observation-1.12.13.jar:1.12.13]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.1.15.jar:6.1.15]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.1.15.jar:6.1.15]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
+Caused by: org.apache.hc.client5.http.HttpHostConnectException: Connect to http://localhost:8093 [localhost/127.0.0.1, localhost/0:0:0:0:0:0:0:1] failed: Connection refused: getsockopt
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method) ~[na:na]
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:684) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:547) ~[na:na]
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:602) ~[na:na]
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327) ~[na:na]
+	at java.base/java.net.Socket.connect(Socket.java:633) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.lambda$connectSocket$0(PlainConnectionSocketFactory.java:91) ~[httpclient5-5.2.3.jar:5.2.3]
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:569) ~[na:na]
+	at org.apache.hc.client5.http.socket.PlainConnectionSocketFactory.connectSocket(PlainConnectionSocketFactory.java:90) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.socket.ConnectionSocketFactory.connectSocket(ConnectionSocketFactory.java:123) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.DefaultHttpClientConnectionOperator.connect(DefaultHttpClientConnectionOperator.java:184) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager.connect(PoolingHttpClientConnectionManager.java:447) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:162) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalExecRuntime.connectEndpoint(InternalExecRuntime.java:172) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ConnectExec.execute(ConnectExec.java:142) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ProtocolExec.execute(ProtocolExec.java:192) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.HttpRequestRetryExec.execute(HttpRequestRetryExec.java:96) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ContentCompressionExec.execute(ContentCompressionExec.java:152) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.RedirectExec.execute(RedirectExec.java:115) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.ExecChainElement.execute(ExecChainElement.java:51) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.InternalHttpClient.doExecute(InternalHttpClient.java:170) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:87) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.impl.classic.CloseableHttpClient.execute(CloseableHttpClient.java:55) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.apache.hc.client5.http.classic.HttpClient.executeOpen(HttpClient.java:183) ~[httpclient5-5.2.3.jar:5.2.3]
+	at org.springframework.http.client.HttpComponentsClientHttpRequest.executeInternal(HttpComponentsClientHttpRequest.java:99) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractStreamingClientHttpRequest.executeInternal(AbstractStreamingClientHttpRequest.java:70) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:112) ~[spring-web-6.1.15.jar:6.1.15]
+	at com.se.frms.fraudengine.config.CorrelationIdRequestInterceptor.intercept(CorrelationIdRequestInterceptor.java:31) ~[classes/:na]
+	at org.springframework.http.client.InterceptingClientHttpRequest$InterceptingRequestExecution.execute(InterceptingClientHttpRequest.java:88) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.InterceptingClientHttpRequest.executeInternal(InterceptingClientHttpRequest.java:72) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractBufferingClientHttpRequest.executeInternal(AbstractBufferingClientHttpRequest.java:48) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.http.client.AbstractClientHttpRequest.execute(AbstractClientHttpRequest.java:66) ~[spring-web-6.1.15.jar:6.1.15]
+	at org.springframework.web.client.DefaultRestClient$DefaultRequestBodyUriSpec.exchangeInternal(DefaultRestClient.java:496) ~[spring-web-6.1.15.jar:6.1.15]
+	... 18 common frames omitted
+
+2026-09-11T14:52:52.949+05:30  WARN 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refresh failed. Keeping existing ruleCount=0, reason=Unable to fetch active rules from Rule Cache
+2026-09-11T14:53:22.942+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:53:25.235+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:53:25.235+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:53:25.238+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:53:25.312+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:53:25.312+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:53:55.246+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:53:55.271+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:53:55.271+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:53:55.324+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:53:55.345+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:53:55.346+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:54:25.280+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:54:25.318+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:54:25.318+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:54:25.355+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:54:25.399+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:54:25.399+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:54:55.319+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:54:55.347+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:54:55.348+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:54:55.414+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:54:55.436+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:54:55.436+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:55:25.354+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:55:25.451+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:55:25.451+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:55:25.453+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:55:25.477+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:55:25.478+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:55:55.468+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:55:55.487+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:55:55.487+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:55:55.488+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:55:55.507+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:55:55.507+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:56:25.500+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:56:25.521+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:56:25.521+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:56:25.521+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:56:25.535+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:56:25.535+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:56:55.534+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:56:55.555+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:56:55.555+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:56:55.555+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:56:55.577+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:56:55.577+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:57:21.825+05:30  INFO 20836 --- [fraud-engine-service] [AsyncResolver-bootstrap-executor-%d] c.n.d.s.r.aws.ConfigClusterResolver      : Resolving eureka endpoints via configuration
+2026-09-11T14:57:25.557+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:57:25.576+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:57:25.576+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:57:25.583+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:57:25.605+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:57:25.605+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:57:55.595+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:57:55.618+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:57:55.618+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:57:55.618+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:57:55.636+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:57:55.636+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:58:25.625+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:58:25.644+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:58:25.644+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:58:25.645+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:58:25.659+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:58:25.659+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:58:55.650+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:58:55.665+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:58:55.665+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:58:55.667+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:58:55.679+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:58:55.679+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:59:25.682+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:59:25.700+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:59:25.700+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:59:25.701+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:59:25.711+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:59:25.712+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T14:59:55.716+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T14:59:55.740+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T14:59:55.741+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T14:59:55.743+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T14:59:55.763+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T14:59:55.763+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T15:00:25.750+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T15:00:25.766+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T15:00:25.766+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T15:00:25.766+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T15:00:25.776+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T15:00:25.777+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T15:00:55.780+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T15:00:55.797+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T15:00:55.797+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T15:00:55.797+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T15:00:55.817+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T15:00:55.817+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T15:01:25.802+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T15:01:25.820+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T15:01:25.820+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T15:01:25.821+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T15:01:25.836+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T15:01:25.836+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T15:01:55.824+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T15:01:55.844+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T15:01:55.845+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T15:01:55.846+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T15:01:55.861+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T15:01:55.862+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T15:02:21.841+05:30  INFO 20836 --- [fraud-engine-service] [AsyncResolver-bootstrap-executor-%d] c.n.d.s.r.aws.ConfigClusterResolver      : Resolving eureka endpoints via configuration
+2026-09-11T15:02:25.856+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T15:02:25.871+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 4 active blacklist entries from Rule Cache
+2026-09-11T15:02:25.872+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=4
+2026-09-11T15:02:25.872+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T15:02:25.883+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 10 active rules from Rule Cache
+2026-09-11T15:02:25.883+05:30  INFO 20836 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=10
+2026-09-11T15:02:43.637+05:30  INFO 20836 --- [fraud-engine-service] [SpringApplicationShutdownHook] o.s.c.n.e.s.EurekaServiceRegistry        : Unregistering application FRAUD-ENGINE-SERVICE with eureka with status DOWN
+2026-09-11T15:02:43.637+05:30  INFO 20836 --- [fraud-engine-service] [SpringApplicationShutdownHook] com.netflix.discovery.DiscoveryClient    : Saw local status change event StatusChangeEvent [timestamp=1789119163637, current=DOWN, previous=UP]
+2026-09-11T15:02:43.638+05:30  INFO 20836 --- [fraud-engine-service] [DiscoveryClient-InstanceInfoReplicator-%d] com.netflix.discovery.DiscoveryClient    : DiscoveryClient_FRAUD-ENGINE-SERVICE/fraud-engine-service:8092: registering service...
+2026-09-11T15:02:43.657+05:30  INFO 20836 --- [fraud-engine-service] [DiscoveryClient-InstanceInfoReplicator-%d] com.netflix.discovery.DiscoveryClient    : DiscoveryClient_FRAUD-ENGINE-SERVICE/fraud-engine-service:8092 - registration status: 204
+2026-09-11T15:02:43.969+05:30  INFO 20836 --- [fraud-engine-service] [SpringApplicationShutdownHook] com.netflix.discovery.DiscoveryClient    : Shutting down DiscoveryClient ...
+2026-09-11T15:02:46.979+05:30  INFO 20836 --- [fraud-engine-service] [SpringApplicationShutdownHook] com.netflix.discovery.DiscoveryClient    : Unregistering ...
+2026-09-11T15:02:46.997+05:30  INFO 20836 --- [fraud-engine-service] [SpringApplicationShutdownHook] com.netflix.discovery.DiscoveryClient    : DiscoveryClient_FRAUD-ENGINE-SERVICE/fraud-engine-service:8092 - deregister  status: 200
+2026-09-11T15:02:46.998+05:30  INFO 20836 --- [fraud-engine-service] [SpringApplicationShutdownHook] com.netflix.discovery.DiscoveryClient    : Completed shut down of DiscoveryClient

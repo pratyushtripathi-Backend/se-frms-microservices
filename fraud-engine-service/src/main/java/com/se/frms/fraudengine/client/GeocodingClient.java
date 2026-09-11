@@ -4,7 +4,6 @@ import com.se.frms.fraudengine.dto.GeocodeResult;
 import com.se.frms.fraudengine.dto.GeoapifyProperties;
 import com.se.frms.fraudengine.dto.GeoapifyReverseGeocodeResponse;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -36,12 +35,10 @@ import java.util.Optional;
  * Geoapify's other endpoints use.
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class GeocodingClient {
 
     // Geoapify's API is always external/public - never routed through Eureka load-balancing.
-    @Qualifier("directRestClientBuilder")
     private final RestClient.Builder directRestClientBuilder;
 
     @Value("${geoapify.geocoding.base-url:https://api.geoapify.com/v1/geocode/reverse}")
@@ -49,6 +46,10 @@ public class GeocodingClient {
 
     @Value("${geoapify.geocoding.api-key:}")
     private String apiKey;
+
+    public GeocodingClient(@Qualifier("directRestClientBuilder") RestClient.Builder directRestClientBuilder) {
+        this.directRestClientBuilder = directRestClientBuilder;
+    }
 
     public Optional<GeocodeResult> reverseGeocode(BigDecimal latitude, BigDecimal longitude) {
 
