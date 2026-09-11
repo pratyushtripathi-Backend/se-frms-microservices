@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.Getter;
@@ -39,6 +40,17 @@ public class FraudAnalytics {
 
     @Column(name = "fraud_decision", nullable = false, length = 20)
     private String fraudDecision;
+
+    // Both pulled out of transactionData (which transaction-service always
+    // populates with these exact keys) at ingestion time in handleFraudEvent(),
+    // so Transaction Monitoring / Fraud Detect Type can query them directly
+    // instead of parsing JSON per request. Nullable so existing rows saved
+    // before this column existed are unaffected.
+    @Column(name = "amount", precision = 19, scale = 4)
+    private BigDecimal amount;
+
+    @Column(name = "channel", length = 50)
+    private String channel;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "triggered_rules", columnDefinition = "jsonb")

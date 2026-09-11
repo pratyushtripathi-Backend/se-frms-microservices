@@ -1,6 +1,8 @@
 package com.se.frms.analytics.controller;
 
 import com.se.frms.analytics.dto.AnalyticsSummaryResponse;
+import com.se.frms.analytics.dto.ChannelCountResponse;
+import com.se.frms.analytics.dto.DailyTransactionVolumeResponse;
 import com.se.frms.analytics.dto.DecisionCountResponse;
 import com.se.frms.analytics.dto.FraudAnalyticsResponse;
 import com.se.frms.analytics.dto.RulePerformanceResponse;
@@ -88,5 +90,23 @@ public class AnalyticsController {
     ) {
         log.info("GET /api/v1/analytics/rule-performance received limit={}", limit);
         return ResponseEntity.ok(analyticsService.getRulePerformance(limit));
+    }
+
+    @GetMapping("/transactions/daily")
+    public ResponseEntity<List<DailyTransactionVolumeResponse>> getDailyTransactionVolume(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
+    ) {
+        log.info("GET /api/v1/analytics/transactions/daily received fromDate={}, toDate={}", fromDate, toDate);
+        return ResponseEntity.ok(analyticsService.getDailyTransactionVolume(fromDate, toDate));
+    }
+
+    @GetMapping("/transactions/by-channel")
+    public ResponseEntity<List<ChannelCountResponse>> getTransactionsByChannel(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
+    ) {
+        log.info("GET /api/v1/analytics/transactions/by-channel received fromDate={}, toDate={}", fromDate, toDate);
+        return ResponseEntity.ok(analyticsService.getTransactionsByChannel(fromDate, toDate));
     }
 }

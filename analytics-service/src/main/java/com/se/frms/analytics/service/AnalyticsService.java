@@ -1,5 +1,7 @@
 package com.se.frms.analytics.service;
 import com.se.frms.analytics.dto.AnalyticsSummaryResponse;
+import com.se.frms.analytics.dto.ChannelCountResponse;
+import com.se.frms.analytics.dto.DailyTransactionVolumeResponse;
 import com.se.frms.analytics.dto.DecisionCountResponse;
 import com.se.frms.analytics.dto.FraudEvent;
 import com.se.frms.analytics.dto.FraudAnalyticsResponse;
@@ -24,4 +26,8 @@ public interface AnalyticsService {
     List<DecisionCountResponse> getDecisionCounts(LocalDate fromDate, LocalDate toDate);
 
     List<RulePerformanceResponse> getRulePerformance(int limit);
+
+    List<DailyTransactionVolumeResponse> getDailyTransactionVolume(LocalDate fromDate, LocalDate toDate);
+
+    List<ChannelCountResponse> getTransactionsByChannel(LocalDate fromDate, LocalDate toDate);
 }

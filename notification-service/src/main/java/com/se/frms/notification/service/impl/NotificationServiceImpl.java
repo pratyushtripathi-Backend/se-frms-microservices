@@ -11,24 +11,21 @@ import com.se.frms.notification.service.NotificationService;
 import com.se.frms.notification.service.NotificationRecipientCacheService;
 import com.se.frms.notification.service.NotificationTemplateCacheService;
 import com.se.frms.notification.service.SmsSenderService;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import com.se.frms.notification.dto.AdminNotificationRecipient;
 import java.time.LocalDateTime;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Executor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -58,8 +55,9 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationTemplateCacheService notificationTemplateCacheService;
     private final SmsSenderService smsSenderService;
     private final TaskScheduler notificationRetryTaskScheduler;
-    @Qualifier("notificationDeliveryExecutor")
-    private final Executor notificationDeliveryExecutor;
+    // Pushes DASHBOARD alerts to "/topic/alerts" for connected WebSocket
+    // clients - see createIfAbsent(). Scoped to notifications only; no other
+    // notification type or service publishes over WebSocket.
     private final SimpMessagingTemplate messagingTemplate;
 
     @Value("${notification.email.enabled:false}")
@@ -94,23 +92,8 @@ public class NotificationServiceImpl implements NotificationService {
         log.info("Dashboard notification ready transactionId={}", event.transactionId());
 
         if (BLOCK.equals(decision) || REVIEW.equals(decision)) {
-            // Dispatched to a bounded background pool instead of running inline: a slow
-            // SMTP/SMS provider call must never block this Kafka listener thread, or every
-            // fraud event behind this one in the topic gets delayed waiting for it.
-            notificationDeliveryExecutor.execute(() -> dispatchAlerts(event, decision, data));
-        }
-    }
-
-    private void dispatchAlerts(FraudEvent event, String decision, Map<String, Object> data) {
-        try {
             sendConfiguredAdminEmails(event, decision, data);
-        } catch (Exception ex) {
-            log.error("Unexpected failure dispatching email alerts transactionId={}", event.transactionId(), ex);
-        }
-        try {
             sendConfiguredAdminSms(event, decision);
-        } catch (Exception ex) {
-            log.error("Unexpected failure dispatching SMS alerts transactionId={}", event.transactionId(), ex);
         }
     }
 
@@ -124,54 +107,6 @@ public class NotificationServiceImpl implements NotificationService {
             String alertStatus,
             String recipient,
             Pageable pageable
-    ) {
-        Specification<Notification> specification = buildSpecification(
-                transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient
-        );
-        return notificationRepository.findAll(specification, pageable).map(this::toResponse);
-    }
-
-    /**
-     * Same filters as above, but page/size are nullable: size == null means the
-     * caller wants EVERYTHING (no pagination) in one response, used by the
-     * frontend "all notifications" table. size provided -> normal paginated response.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public Page<NotificationResponse> getNotifications(
-            UUID transactionId,
-            String notificationType,
-            String fraudDecision,
-            String notificationStatus,
-            String alertStatus,
-            String recipient,
-            Integer page,
-            Integer size
-    ) {
-        Specification<Notification> specification = buildSpecification(
-                transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient
-        );
-        Sort sort = Sort.by(Sort.Direction.DESC, "createdDate");
-
-        if (size == null) {
-            List<NotificationResponse> all = notificationRepository.findAll(specification, sort)
-                    .stream()
-                    .map(this::toResponse)
-                    .toList();
-            return new PageImpl<>(all, Pageable.unpaged(), all.size());
-        }
-
-        Pageable pageable = PageRequest.of(page != null ? page : 0, size, sort);
-        return notificationRepository.findAll(specification, pageable).map(this::toResponse);
-    }
-
-    private Specification<Notification> buildSpecification(
-            UUID transactionId,
-            String notificationType,
-            String fraudDecision,
-            String notificationStatus,
-            String alertStatus,
-            String recipient
     ) {
         Specification<Notification> specification = Specification.where(null);
         if (transactionId != null) {
@@ -192,7 +127,29 @@ public class NotificationServiceImpl implements NotificationService {
         if (StringUtils.hasText(recipient)) {
             specification = specification.and((root, query, cb) -> cb.equal(root.get("recipient"), recipient));
         }
-        return specification;
+        return notificationRepository.findAll(specification, pageable).map(this::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<NotificationResponse> getNotifications(
+            UUID transactionId,
+            String notificationType,
+            String fraudDecision,
+            String notificationStatus,
+            String alertStatus,
+            String recipient,
+            Integer page,
+            Integer size
+    ) {
+        // size == null -> everything, newest first, no pagination.
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdDate");
+        Pageable pageable = size == null
+                ? Pageable.unpaged(sort)
+                : PageRequest.of(page == null ? 0 : page, size, sort);
+        return getNotifications(
+                transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient, pageable
+        );
     }
 
     @Override
@@ -254,13 +211,9 @@ public class NotificationServiceImpl implements NotificationService {
         log.info("Notification recorded transactionId={}, type={}, status={}",
                 event.transactionId(), type, deliveryStatus);
 
-        // Real-time push for the admin dashboard, in addition to (not instead of) the
-        // existing DB save above - the REST dashboard/feed endpoint is untouched and
-        // still returns the same data for anyone who has not connected over WebSocket.
         if (DASHBOARD.equals(type)) {
             messagingTemplate.convertAndSend("/topic/alerts", toResponse(notification));
-            log.info("WebSocket push sent to /topic/alerts, transactionId={}, decision={}, notificationId={}",
-                    event.transactionId(), decision, notification.getId());
+            log.info("Dashboard alert pushed over WebSocket transactionId={}", event.transactionId());
         }
     }
 
@@ -403,23 +356,16 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     private void retryDelivery(UUID notificationId) {
-        // Atomic claim: this UPDATE only matches (and only affects a row) if the
-        // notification is still FAILED and under the retry limit at this exact moment.
-        // If scheduleRetry's own timer AND the recoverFailedDeliveries sweep both try to
-        // retry the same notification, only one of these calls can see notification_status
-        // still equal to 'FAILED' and flip it to PENDING — the other gets 0 rows affected
-        // and backs off, so the alert is never sent twice. No schema change needed: this
-        // reuses the existing notification_status/retry_count columns as the claim signal.
-        int claimed = notificationRepository.claimForRetry(notificationId, MAX_RETRY_ATTEMPTS, LocalDateTime.now());
-        if (claimed == 0) {
-            log.info("Notification not eligible or already claimed by another retry attempt, notificationId={}", notificationId);
+        Notification notification = notificationRepository.findById(notificationId).orElse(null);
+        if (notification == null || !FAILED.equals(notification.getNotificationStatus())
+                || notification.getRetryCount() == null || notification.getRetryCount() >= MAX_RETRY_ATTEMPTS) {
             return;
         }
 
-        Notification notification = notificationRepository.findById(notificationId).orElse(null);
-        if (notification == null) {
-            return;
-        }
+        notification.setRetryCount(notification.getRetryCount() + 1);
+        notification.setNotificationStatus(PENDING);
+        notification.setUpdatedAt(LocalDateTime.now());
+        notificationRepository.saveAndFlush(notification);
 
         try {
             if (EMAIL.equals(notification.getNotificationType())) {
@@ -446,30 +392,8 @@ public class NotificationServiceImpl implements NotificationService {
         notificationRepository.save(notification);
 
         if (FAILED.equals(notification.getNotificationStatus())) {
-            if (notification.getRetryCount() != null && notification.getRetryCount() >= MAX_RETRY_ATTEMPTS) {
-                // Every attempt is exhausted. Previously this fell through to scheduleRetry(),
-                // which silently no-ops once retryCount >= MAX_RETRY_ATTEMPTS — the fraud alert
-                // was then just left as FAILED forever with nobody told. Surface it instead.
-                handlePermanentFailure(notification);
-            } else {
-                scheduleRetry(notification.getId());
-            }
+            scheduleRetry(notification.getId());
         }
-    }
-
-    /**
-     * Called once, right when the final retry attempt fails. Nothing about the row
-     * itself changes (no new status, no schema change) — notification_status stays
-     * FAILED and retry_count stays at MAX_RETRY_ATTEMPTS, which is already a reliable,
-     * queryable signal for "permanently failed" via the existing GET /notifications
-     * endpoint (notificationStatus=FAILED, retryCount=MAX_RETRY_ATTEMPTS).
-     */
-    private void handlePermanentFailure(Notification notification) {
-        log.error("PERMANENTLY FAILED: fraud alert could not be delivered after {} attempts. "
-                        + "notificationId={}, transactionId={}, type={}, recipient={}, decision={}, failureReason={}",
-                notification.getRetryCount(), notification.getId(), notification.getTransactionId(),
-                notification.getNotificationType(), notification.getRecipient(), notification.getFraudDecision(),
-                notification.getFailureReason());
     }
 
     /** Recover retryable failures left behind if the service restarted mid-retry. */

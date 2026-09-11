@@ -1,5 +1,7 @@
 package com.se.frms.analytics.service.impl;
 import com.se.frms.analytics.dto.AnalyticsSummaryResponse;
+import com.se.frms.analytics.dto.ChannelCountResponse;
+import com.se.frms.analytics.dto.DailyTransactionVolumeResponse;
 import com.se.frms.analytics.dto.DecisionCountResponse;
 import com.se.frms.analytics.dto.FraudAnalyticsResponse;
 import com.se.frms.analytics.dto.FraudEvent;
@@ -8,6 +10,7 @@ import com.se.frms.analytics.entity.FraudAnalytics;
 import com.se.frms.analytics.repository.FraudAnalyticsRepository;
 import com.se.frms.analytics.service.AnalyticsService;
 import jakarta.persistence.criteria.Predicate;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -36,6 +39,12 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     private static final String REVIEW = "REVIEW";
     private static final String BLOCK = "BLOCK";
     private static final String ANALYTICS_SERVICE = "ANALYTICS_SERVICE";
+    // A transaction counts as "high risk" once its score reaches the same
+    // floor decision-service's default policy uses to start blocking
+    // (decision.threshold.review-max defaults to 69, so BLOCK starts at 70).
+    // This is independent of whatever the active admin decision policy
+    // actually did with the transaction - it's a fixed risk-score cutoff.
+    private static final int HIGH_RISK_THRESHOLD = 70;
 
     private final FraudAnalyticsRepository fraudAnalyticsRepository;
 
@@ -52,6 +61,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         analytics.setFraudDecision(normalizeDecision(event.fraudDecision()));
         analytics.setTriggeredRules(event.triggeredRules());
         analytics.setTransactionData(event.transactionData());
+        analytics.setAmount(extractAmount(event.transactionData()));
+        analytics.setChannel(extractChannel(event.transactionData()));
         analytics.setStatus(true);
         analytics.setCreatedBy(ANALYTICS_SERVICE);
         fraudAnalyticsRepository.save(analytics);
@@ -124,7 +135,32 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 .average()
                 .orElse(0);
 
-        return new AnalyticsSummaryResponse(total, allowCount, reviewCount, blockCount, averageRiskScore);
+        // "Fraud Alert" = anything not cleanly ALLOW-ed, i.e. REVIEW + BLOCK.
+        long fraudAlertCount = reviewCount + blockCount;
+
+        long highRiskCount = rows.stream()
+                .map(FraudAnalytics::getTotalRiskScore)
+                .filter(score -> score != null && score >= HIGH_RISK_THRESHOLD)
+                .count();
+
+        // Rows saved before the amount column existed have a null amount -
+        // treated as 0 here rather than skipped, so a handful of old rows
+        // can't silently make this look smaller than it should be.
+        BigDecimal blockedAmount = rows.stream()
+                .filter(row -> BLOCK.equals(row.getFraudDecision()))
+                .map(row -> row.getAmount() != null ? row.getAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return new AnalyticsSummaryResponse(
+                total,
+                allowCount,
+                reviewCount,
+                blockCount,
+                averageRiskScore,
+                fraudAlertCount,
+                highRiskCount,
+                blockedAmount
+        );
     }
 
     @Override
@@ -173,6 +209,61 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 .sorted(Comparator.comparingLong(RulePerformanceResponse::triggerCount).reversed())
                 .limit(effectiveLimit)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DailyTransactionVolumeResponse> getDailyTransactionVolume(LocalDate fromDate, LocalDate toDate) {
+        DateRange range = resolveDateRange(fromDate, toDate);
+        log.info("Fetching daily transaction volume fromDate={}, toDate={}", fromDate, toDate);
+        return fraudAnalyticsRepository.sumAmountByDay(range.from(), range.to())
+                .stream()
+                .map(row -> new DailyTransactionVolumeResponse(row.getDay().toLocalDate(), row.getTotalAmount()))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ChannelCountResponse> getTransactionsByChannel(LocalDate fromDate, LocalDate toDate) {
+        DateRange range = resolveDateRange(fromDate, toDate);
+        log.info("Fetching transactions by channel fromDate={}, toDate={}", fromDate, toDate);
+        return fraudAnalyticsRepository.countByChannel(range.from(), range.to())
+                .stream()
+                .map(row -> new ChannelCountResponse(
+                        row.getChannel() != null ? row.getChannel() : "UNKNOWN",
+                        row.getTransactionCount()
+                ))
+                .toList();
+    }
+
+    // transactionData is a generic Map<String,Object> deserialized from JSON,
+    // so "amount" can come through as a Double, Integer, or String depending
+    // on how the original request supplied it - BigDecimal's String
+    // constructor handles all of those uniformly. Returns null (rather than
+    // throwing) for a missing/malformed value so one bad event never breaks
+    // saving analytics for that transaction.
+    private BigDecimal extractAmount(Map<String, Object> transactionData) {
+        if (transactionData == null) {
+            return null;
+        }
+        Object value = transactionData.get("amount");
+        if (value == null) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value.toString());
+        } catch (NumberFormatException ex) {
+            log.warn("Unable to parse transaction amount from event payload: {}", value);
+            return null;
+        }
+    }
+
+    private String extractChannel(Map<String, Object> transactionData) {
+        if (transactionData == null) {
+            return null;
+        }
+        Object value = transactionData.get("channel");
+        return value == null ? null : value.toString();
     }
 
     private UUID requireId(UUID id, String fieldName, UUID transactionId) {

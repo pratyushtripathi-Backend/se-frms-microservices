@@ -1,12 +1,33 @@
-2026-09-08T00:32:06.695+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
-2026-09-08T00:32:07.357+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
-2026-09-08T00:32:07.357+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
-2026-09-08T10:15:22.410+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
-2026-09-08T10:15:22.650+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
-2026-09-08T10:15:22.650+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
-2026-09-08T10:15:53.860+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
-2026-09-08T10:15:55.000+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
-2026-09-08T10:15:55.000+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
-2026-09-08T10:16:25.003+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
-2026-09-08T10:16:25.041+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
-2026-09-08T10:16:25.041+05:30  INFO 11564 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-11T01:48:36.516+05:30  INFO 5328 --- [fraud-engine-service] [kafka-producer-network-thread | producer-1] org.apache.kafka.clients.NetworkClient   : [Producer clientId=producer-1] Node 1 disconnected.
+2026-09-11T10:30:12.526+05:30  INFO 5328 --- [fraud-engine-service] [kafka-producer-network-thread | producer-1] org.apache.kafka.clients.NetworkClient   : [Producer clientId=producer-1] Node 1 disconnected.
+2026-09-11T10:30:16.085+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T10:30:16.186+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 0 active blacklist entries from Rule Cache
+2026-09-11T10:30:16.188+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=0
+2026-09-11T10:30:16.188+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T10:30:16.633+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-11T10:30:16.633+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-11T10:30:46.190+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T10:30:46.632+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 0 active blacklist entries from Rule Cache
+2026-09-11T10:30:46.632+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=0
+2026-09-11T10:30:46.641+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T10:30:46.708+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-11T10:30:46.708+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-11T10:30:57.982+05:30  INFO 5328 --- [fraud-engine-service] [AsyncResolver-bootstrap-executor-%d] c.n.d.s.r.aws.ConfigClusterResolver      : Resolving eureka endpoints via configuration
+2026-09-11T10:31:16.636+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T10:31:16.776+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 0 active blacklist entries from Rule Cache
+2026-09-11T10:31:16.776+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=0
+2026-09-11T10:31:16.776+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T10:31:16.879+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-11T10:31:16.879+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-11T10:31:46.783+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T10:31:46.812+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 0 active blacklist entries from Rule Cache
+2026-09-11T10:31:46.812+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=0
+2026-09-11T10:31:46.887+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T10:31:46.905+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-11T10:31:46.905+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
+2026-09-11T10:32:16.821+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetching active blacklist from Rule Cache
+2026-09-11T10:32:16.852+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.BlacklistCacheClient      : Fetched 0 active blacklist entries from Rule Cache
+2026-09-11T10:32:16.852+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.cache.ActiveBlacklistCache       : Active blacklist cache refreshed entryCount=0
+2026-09-11T10:32:16.914+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetching active rules from Rule Cache
+2026-09-11T10:32:16.940+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.f.client.RuleCacheClient           : Fetched 9 active rules from Rule Cache
+2026-09-11T10:32:16.942+05:30  INFO 5328 --- [fraud-engine-service] [scheduling-1] c.s.f.fraudengine.cache.ActiveRuleCache  : Active rule cache refreshed ruleCount=9
