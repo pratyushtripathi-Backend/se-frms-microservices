@@ -1,5 +1,6 @@
 package com.se.frms.notification.controller;
 
+import com.se.frms.notification.dto.NotificationListResponse;
 import com.se.frms.notification.dto.NotificationResponse;
 import com.se.frms.notification.dto.UpdateAlertStatusRequest;
 import com.se.frms.notification.service.NotificationService;
@@ -25,7 +26,7 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping
-    public ResponseEntity<Page<NotificationResponse>> getNotifications(
+    public ResponseEntity<Page<NotificationListResponse>> getNotifications(
             @RequestParam(required = false) UUID transactionId,
             @RequestParam(required = false) String notificationType,
             @RequestParam(required = false) String fraudDecision,
@@ -35,7 +36,7 @@ public class NotificationController {
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size
     ) {
-        return ResponseEntity.ok(notificationService.getNotifications(
+        return ResponseEntity.ok(notificationService.getNotificationsList(
                 transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient, page, size
         ));
     }

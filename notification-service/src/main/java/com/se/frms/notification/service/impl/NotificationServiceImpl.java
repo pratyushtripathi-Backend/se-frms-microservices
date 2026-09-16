@@ -3,6 +3,7 @@ package com.se.frms.notification.service.impl;
 import com.se.frms.notification.dto.FraudEvent;
 import com.se.frms.notification.dto.EmailTemplateContent;
 import com.se.frms.notification.dto.NotificationResponse;
+import com.se.frms.notification.dto.NotificationListResponse;
 import com.se.frms.notification.dto.UpdateAlertStatusRequest;
 import com.se.frms.notification.entity.Notification;
 import com.se.frms.notification.repository.NotificationRepository;
@@ -148,6 +149,60 @@ public class NotificationServiceImpl implements NotificationService {
                 ? Pageable.unpaged(sort)
                 : PageRequest.of(page == null ? 0 : page, size, sort);
         return getNotifications(
+                transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient, pageable
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<NotificationListResponse> getNotificationsList(
+            UUID transactionId,
+            String notificationType,
+            String fraudDecision,
+            String notificationStatus,
+            String alertStatus,
+            String recipient,
+            Pageable pageable
+    ) {
+        Specification<Notification> specification = Specification.where(null);
+        if (transactionId != null) {
+            specification = specification.and((root, query, cb) -> cb.equal(root.get("transactionId"), transactionId));
+        }
+        if (StringUtils.hasText(notificationType)) {
+            specification = specification.and((root, query, cb) -> cb.equal(root.get("notificationType"), notificationType));
+        }
+        if (StringUtils.hasText(fraudDecision)) {
+            specification = specification.and((root, query, cb) -> cb.equal(root.get("fraudDecision"), fraudDecision));
+        }
+        if (StringUtils.hasText(notificationStatus)) {
+            specification = specification.and((root, query, cb) -> cb.equal(root.get("notificationStatus"), notificationStatus));
+        }
+        if (StringUtils.hasText(alertStatus)) {
+            specification = specification.and((root, query, cb) -> cb.equal(root.get("alertStatus"), alertStatus));
+        }
+        if (StringUtils.hasText(recipient)) {
+            specification = specification.and((root, query, cb) -> cb.equal(root.get("recipient"), recipient));
+        }
+        return notificationRepository.findAll(specification, pageable).map(this::toListResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<NotificationListResponse> getNotificationsList(
+            UUID transactionId,
+            String notificationType,
+            String fraudDecision,
+            String notificationStatus,
+            String alertStatus,
+            String recipient,
+            Integer page,
+            Integer size
+    ) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdDate");
+        Pageable pageable = size == null
+                ? Pageable.unpaged(sort)
+                : PageRequest.of(page == null ? 0 : page, size, sort);
+        return getNotificationsList(
                 transactionId, notificationType, fraudDecision, notificationStatus, alertStatus, recipient, pageable
         );
     }
@@ -550,6 +605,23 @@ public class NotificationServiceImpl implements NotificationService {
                 notification.getAlertStatus(),
                 notification.getRetryCount(),
                 notification.getFailureReason(), notification.getStatus(), notification.getCreatedDate(), notification.getUpdatedAt()
+        );
+    }
+
+    private NotificationListResponse toListResponse(Notification notification) {
+        return new NotificationListResponse(
+                notification.getId(),
+                notification.getTransactionId(),
+                notification.getNotificationType(),
+                notification.getRecipient(),
+                notification.getSubject(),
+                notification.getFraudDecision(),
+                notification.getRiskScore(),
+                notification.getNotificationStatus(),
+                notification.getFailureReason(),
+                notification.getCreatedBy(),
+                notification.getCreatedDate(),
+                notification.getUpdatedAt()
         );
     }
 }
