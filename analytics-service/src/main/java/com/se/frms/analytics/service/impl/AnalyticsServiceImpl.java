@@ -5,6 +5,7 @@ import com.se.frms.analytics.dto.DailyTransactionVolumeResponse;
 import com.se.frms.analytics.dto.DecisionCountResponse;
 import com.se.frms.analytics.dto.FraudAnalyticsResponse;
 import com.se.frms.analytics.dto.FraudEvent;
+import com.se.frms.analytics.dto.FraudTrendResponse;
 import com.se.frms.analytics.dto.RulePerformanceResponse;
 import com.se.frms.analytics.entity.FraudAnalytics;
 import com.se.frms.analytics.repository.FraudAnalyticsRepository;
@@ -45,6 +46,11 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     // This is independent of whatever the active admin decision policy
     // actually did with the transaction - it's a fixed risk-score cutoff.
     private static final int HIGH_RISK_THRESHOLD = 70;
+    private static final String GROUP_BY_DAY = "day";
+    private static final String GROUP_BY_WEEK = "week";
+    private static final String GROUP_BY_MONTH = "month";
+    private static final String GROUP_BY_QUARTER = "quarter";
+    private static final String GROUP_BY_YEAR = "year";
 
     private final FraudAnalyticsRepository fraudAnalyticsRepository;
 
@@ -234,6 +240,43 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                         row.getTransactionCount()
                 ))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FraudTrendResponse> getFraudTrend(String groupBy, LocalDate fromDate, LocalDate toDate) {
+        DateRange range = resolveDateRange(fromDate, toDate);
+        String normalizedGroupBy = normalizeGroupBy(groupBy);
+        log.info(
+                "Fetching fraud trend groupBy={}, fromDate={}, toDate={}",
+                normalizedGroupBy,
+                fromDate,
+                toDate
+        );
+        // groupBy is validated against a fixed allow-list above and only ever
+        // used to pick one of three hardcoded repository queries below - it
+        // is never interpolated into SQL text.
+        List<FraudAnalyticsRepository.TrendProjection> rows = switch (normalizedGroupBy) {
+            case GROUP_BY_DAY -> fraudAnalyticsRepository.getFraudTrendByDay(range.from(), range.to());
+            case GROUP_BY_WEEK -> fraudAnalyticsRepository.getFraudTrendByWeek(range.from(), range.to());
+            case GROUP_BY_QUARTER -> fraudAnalyticsRepository.getFraudTrendByQuarter(range.from(), range.to());
+            case GROUP_BY_YEAR -> fraudAnalyticsRepository.getFraudTrendByYear(range.from(), range.to());
+            default -> fraudAnalyticsRepository.getFraudTrendByMonth(range.from(), range.to());
+        };
+        return rows.stream()
+                .map(row -> new FraudTrendResponse(row.getPeriod(), row.getFraudAlertCount(), row.getBlockedCount()))
+                .toList();
+    }
+
+    private String normalizeGroupBy(String groupBy) {
+        String normalized = groupBy == null ? GROUP_BY_MONTH : groupBy.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case GROUP_BY_DAY -> GROUP_BY_DAY;
+            case GROUP_BY_WEEK -> GROUP_BY_WEEK;
+            case GROUP_BY_QUARTER -> GROUP_BY_QUARTER;
+            case GROUP_BY_YEAR -> GROUP_BY_YEAR;
+            default -> GROUP_BY_MONTH;
+        };
     }
 
     // transactionData is a generic Map<String,Object> deserialized from JSON,

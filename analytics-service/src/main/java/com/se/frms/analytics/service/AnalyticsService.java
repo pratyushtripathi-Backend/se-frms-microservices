@@ -5,6 +5,7 @@ import com.se.frms.analytics.dto.DailyTransactionVolumeResponse;
 import com.se.frms.analytics.dto.DecisionCountResponse;
 import com.se.frms.analytics.dto.FraudEvent;
 import com.se.frms.analytics.dto.FraudAnalyticsResponse;
+import com.se.frms.analytics.dto.FraudTrendResponse;
 import com.se.frms.analytics.dto.RulePerformanceResponse;
 import java.time.LocalDate;
 import java.util.List;
@@ -30,4 +31,6 @@ public interface AnalyticsService {
     List<DailyTransactionVolumeResponse> getDailyTransactionVolume(LocalDate fromDate, LocalDate toDate);
 
     List<ChannelCountResponse> getTransactionsByChannel(LocalDate fromDate, LocalDate toDate);
+
+    List<FraudTrendResponse> getFraudTrend(String groupBy, LocalDate fromDate, LocalDate toDate);
 }
