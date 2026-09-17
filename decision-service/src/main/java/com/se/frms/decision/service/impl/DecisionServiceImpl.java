@@ -103,6 +103,7 @@ public class DecisionServiceImpl implements DecisionService {
                 "Fetching decisions page={}, size={}, year={}, startDate={}, endDate={}",
                 pageable.getPageNumber(), pageable.getPageSize(), year, startDate, endDate
         );
+
         return decisionRepository.findAll(buildCreatedAtFilter(year, startDate, endDate), pageable)
                 .map(this::mapToResponse);
     }
