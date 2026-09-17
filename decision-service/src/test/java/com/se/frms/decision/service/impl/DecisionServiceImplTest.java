@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.se.frms.decision.cache.DecisionPolicyCache;
+import com.se.frms.decision.client.ScoringLookupClient;
+import com.se.frms.decision.client.TransactionLookupClient;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionResponse;
 import com.se.frms.decision.repository.DecisionRepository;
@@ -29,11 +31,23 @@ class DecisionServiceImplTest {
     @Mock
     private DecisionPersistenceService decisionPersistenceService;
 
+    @Mock
+    private ScoringLookupClient scoringLookupClient;
+
+    @Mock
+    private TransactionLookupClient transactionLookupClient;
+
     private DecisionServiceImpl decisionService;
 
     @BeforeEach
     void setUp() throws Exception {
-        decisionService = new DecisionServiceImpl(decisionRepository, decisionPolicyCache, decisionPersistenceService);
+        decisionService = new DecisionServiceImpl(
+                decisionRepository,
+                decisionPolicyCache,
+                decisionPersistenceService,
+                scoringLookupClient,
+                transactionLookupClient
+        );
         setField("allowMaxScore", 39);
         setField("reviewMaxScore", 69);
         when(decisionPolicyCache.getActivePolicy()).thenReturn(null);

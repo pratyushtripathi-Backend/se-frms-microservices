@@ -6,12 +6,14 @@ import com.se.frms.decision.dto.DecisionResponse;
 import com.se.frms.decision.dto.DecisionReviewRequest;
 import com.se.frms.decision.service.DecisionService;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -35,9 +37,17 @@ public class DecisionController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<DecisionResponse>> getAll(Pageable pageable) {
-        log.info("GET /api/v1/decisions received page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
-        return ResponseEntity.ok(decisionService.getAll(pageable));
+    public ResponseEntity<Page<DecisionResponse>> getAll(
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            Pageable pageable
+    ) {
+        log.info(
+                "GET /api/v1/decisions received page={}, size={}, year={}, startDate={}, endDate={}",
+                pageable.getPageNumber(), pageable.getPageSize(), year, startDate, endDate
+        );
+        return ResponseEntity.ok(decisionService.getAll(year, startDate, endDate, pageable));
     }
 
     @GetMapping("/{decisionId}")

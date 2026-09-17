@@ -3,6 +3,7 @@ import com.se.frms.decision.dto.CaseResponse;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionResponse;
 import com.se.frms.decision.dto.DecisionReviewRequest;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,7 +12,7 @@ public interface DecisionService {
 
     DecisionResponse process(DecisionRequest request);
 
-    Page<DecisionResponse> getAll(Pageable pageable);
+    Page<DecisionResponse> getAll(Integer year, LocalDate startDate, LocalDate endDate, Pageable pageable);
 
     DecisionResponse getById(UUID decisionId);
 
