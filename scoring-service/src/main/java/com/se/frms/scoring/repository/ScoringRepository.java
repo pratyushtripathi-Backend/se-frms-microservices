@@ -5,8 +5,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
-public interface ScoringRepository extends JpaRepository<Scoring, UUID> {
+public interface ScoringRepository extends JpaRepository<Scoring, UUID>, JpaSpecificationExecutor<Scoring> {
 
     // latest scoring attempt for a transaction (use this for the "GET by transactionId" API)
     Optional<Scoring> findTopByTransactionIdOrderByCreatedDateDesc(UUID transactionId);

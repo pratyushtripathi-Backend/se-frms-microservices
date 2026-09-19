@@ -6,9 +6,14 @@ import com.se.frms.scoring.dto.ScoringRequest;
 import com.se.frms.scoring.dto.ScoringResponse;
 import com.se.frms.scoring.service.ScoringService;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.RequestParam;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,19 +66,29 @@ public class ScoringController {
 
     @GetMapping("/matched-rules")
     public ResponseEntity<Page<MatchedRuleHistoryResponse>> getAllMatchedRules(
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size
+            @RequestParam(name = "year", required = false) Integer year,
+            @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        log.info("GET /api/v1/scoring/matched-rules, page={}, size={}", page, size);
-        return ResponseEntity.ok(scoringService.getAllMatchedRules(page, size));
+        log.info(
+                "GET /api/v1/scoring/matched-rules received page={}, size={}, year={}, startDate={}, endDate={}",
+                pageable.getPageNumber(), pageable.getPageSize(), year, startDate, endDate
+        );
+        return ResponseEntity.ok(scoringService.getAllMatchedRules(year, startDate, endDate, pageable));
     }
 
     @GetMapping("/history")
     public ResponseEntity<Page<ScoringHistoryResponse>> getAllScorings(
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size
+            @RequestParam(name = "year", required = false) Integer year,
+            @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        log.info("GET /api/v1/scoring/history, page={}, size={}", page, size);
-        return ResponseEntity.ok(scoringService.getAllScorings(page, size));
+        log.info(
+                "GET /api/v1/scoring/history received page={}, size={}, year={}, startDate={}, endDate={}",
+                pageable.getPageNumber(), pageable.getPageSize(), year, startDate, endDate
+        );
+        return ResponseEntity.ok(scoringService.getAllScorings(year, startDate, endDate, pageable));
     }
 }

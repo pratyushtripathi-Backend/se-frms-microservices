@@ -15,7 +15,10 @@ import com.se.frms.decision.exception.ExternalServiceException;
 import com.se.frms.decision.repository.DecisionRepository;
 import com.se.frms.decision.service.DecisionPersistenceService;
 import com.se.frms.decision.service.DecisionService;
+import jakarta.persistence.criteria.Predicate;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -94,9 +98,34 @@ public class DecisionServiceImpl implements DecisionService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<DecisionResponse> getAll(Pageable pageable) {
-        log.info("Fetching decisions page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
-        return decisionRepository.findAll(pageable).map(this::mapToResponse);
+    public Page<DecisionResponse> getAll(Integer year, LocalDate startDate, LocalDate endDate, Pageable pageable) {
+        log.info(
+                "Fetching decisions page={}, size={}, year={}, startDate={}, endDate={}",
+                pageable.getPageNumber(), pageable.getPageSize(), year, startDate, endDate
+        );
+
+        return decisionRepository.findAll(buildCreatedAtFilter(year, startDate, endDate), pageable)
+                .map(this::mapToResponse);
+    }
+
+    private Specification<Decision> buildCreatedAtFilter(Integer year, LocalDate startDate, LocalDate endDate) {
+        return (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (year != null) {
+                predicates.add(criteriaBuilder.between(
+                        root.get("createdAt"),
+                        LocalDateTime.of(year, 1, 1, 0, 0, 0),
+                        LocalDateTime.of(year, 12, 31, 23, 59, 59)
+                ));
+            }
+            if (startDate != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("createdAt"), startDate.atStartOfDay()));
+            }
+            if (endDate != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("createdAt"), endDate.atTime(23, 59, 59)));
+            }
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     @Override
