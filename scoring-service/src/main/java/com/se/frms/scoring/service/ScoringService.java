@@ -4,9 +4,11 @@ import com.se.frms.scoring.dto.MatchedRuleHistoryResponse;
 import com.se.frms.scoring.dto.ScoringHistoryResponse;
 import com.se.frms.scoring.dto.ScoringRequest;
 import com.se.frms.scoring.dto.ScoringResponse;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface ScoringService {
 
@@ -19,12 +21,10 @@ public interface ScoringService {
     List<ScoringResponse> getHistoryByTransactionId(UUID transactionId);
 
     // Full matched-rule history across ALL transactions, for frontend listing/reporting.
-    // page/size both null -> returns EVERYTHING (no pagination).
-    // size provided -> normal paginated response.
-    Page<MatchedRuleHistoryResponse> getAllMatchedRules(Integer page, Integer size);
+    // year/startDate/endDate are optional filters on createdDate.
+    Page<MatchedRuleHistoryResponse> getAllMatchedRules(Integer year, LocalDate startDate, LocalDate endDate, Pageable pageable);
 
     // Full scoring history across ALL transactions, for frontend listing/reporting.
-    // page/size both null -> returns EVERYTHING (no pagination).
-    // size provided -> normal paginated response.
-    Page<ScoringHistoryResponse> getAllScorings(Integer page, Integer size);
+    // year/startDate/endDate are optional filters on createdDate.
+    Page<ScoringHistoryResponse> getAllScorings(Integer year, LocalDate startDate, LocalDate endDate, Pageable pageable);
 }

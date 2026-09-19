@@ -14,15 +14,17 @@ import com.se.frms.scoring.repository.MatchedRuleRepository;
 import com.se.frms.scoring.repository.ScoringRepository;
 import com.se.frms.scoring.service.ScoringPersistenceService;
 import com.se.frms.scoring.service.ScoringService;
+import jakarta.persistence.criteria.Predicate;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -177,40 +179,72 @@ public class ScoringServiceImpl implements ScoringService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<MatchedRuleHistoryResponse> getAllMatchedRules(Integer page, Integer size) {
-        Sort sort = Sort.by(Sort.Direction.DESC, "createdDate");
+    public Page<MatchedRuleHistoryResponse> getAllMatchedRules(
+            Integer year, LocalDate startDate, LocalDate endDate, Pageable pageable
+    ) {
+        log.info(
+                "Fetching matched rules page={}, size={}, year={}, startDate={}, endDate={}",
+                pageable.getPageNumber(), pageable.getPageSize(), year, startDate, endDate
+        );
 
-        // No size passed -> caller wants EVERYTHING, no pagination.
-        if (size == null) {
-            List<MatchedRuleHistoryResponse> all = matchedRuleRepository.findAll(sort)
-                    .stream()
-                    .map(this::mapToHistoryResponse)
-                    .toList();
-            return new PageImpl<>(all, Pageable.unpaged(), all.size());
-        }
-
-        Pageable pageable = PageRequest.of(page != null ? page : 0, size, sort);
-        return matchedRuleRepository.findAllByOrderByCreatedDateDesc(pageable)
+        return matchedRuleRepository.findAll(buildMatchedRuleCreatedDateFilter(year, startDate, endDate), pageable)
                 .map(this::mapToHistoryResponse);
+    }
+
+    private Specification<MatchedRule> buildMatchedRuleCreatedDateFilter(
+            Integer year, LocalDate startDate, LocalDate endDate
+    ) {
+        return (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (year != null) {
+                predicates.add(criteriaBuilder.between(
+                        root.get("createdDate"),
+                        LocalDateTime.of(year, 1, 1, 0, 0, 0),
+                        LocalDateTime.of(year, 12, 31, 23, 59, 59)
+                ));
+            }
+            if (startDate != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("createdDate"), startDate.atStartOfDay()));
+            }
+            if (endDate != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("createdDate"), endDate.atTime(23, 59, 59)));
+            }
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ScoringHistoryResponse> getAllScorings(Integer page, Integer size) {
-        Sort sort = Sort.by(Sort.Direction.DESC, "createdDate");
+    public Page<ScoringHistoryResponse> getAllScorings(
+            Integer year, LocalDate startDate, LocalDate endDate, Pageable pageable
+    ) {
+        log.info(
+                "Fetching scorings page={}, size={}, year={}, startDate={}, endDate={}",
+                pageable.getPageNumber(), pageable.getPageSize(), year, startDate, endDate
+        );
 
-        // No size passed -> caller wants EVERYTHING, no pagination.
-        if (size == null) {
-            List<ScoringHistoryResponse> all = scoringRepository.findAll(sort)
-                    .stream()
-                    .map(this::mapToScoringHistoryResponse)
-                    .toList();
-            return new PageImpl<>(all, Pageable.unpaged(), all.size());
-        }
-
-        Pageable pageable = PageRequest.of(page != null ? page : 0, size, sort);
-        return scoringRepository.findAll(pageable)
+        return scoringRepository.findAll(buildCreatedDateFilter(year, startDate, endDate), pageable)
                 .map(this::mapToScoringHistoryResponse);
+    }
+
+    private Specification<Scoring> buildCreatedDateFilter(Integer year, LocalDate startDate, LocalDate endDate) {
+        return (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (year != null) {
+                predicates.add(criteriaBuilder.between(
+                        root.get("createdDate"),
+                        LocalDateTime.of(year, 1, 1, 0, 0, 0),
+                        LocalDateTime.of(year, 12, 31, 23, 59, 59)
+                ));
+            }
+            if (startDate != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("createdDate"), startDate.atStartOfDay()));
+            }
+            if (endDate != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("createdDate"), endDate.atTime(23, 59, 59)));
+            }
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     private ScoringHistoryResponse mapToScoringHistoryResponse(Scoring scoring) {
