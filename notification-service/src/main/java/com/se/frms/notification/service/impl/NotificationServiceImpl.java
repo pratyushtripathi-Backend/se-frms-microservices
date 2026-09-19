@@ -13,8 +13,11 @@ import com.se.frms.notification.service.NotificationRecipientCacheService;
 import com.se.frms.notification.service.NotificationTemplateCacheService;
 import com.se.frms.notification.service.SmsSenderService;
 import com.se.frms.notification.dto.AdminNotificationRecipient;
+import com.se.frms.notification.dto.SmsDeliveryStatus;
 import java.time.LocalDateTime;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -49,7 +52,17 @@ public class NotificationServiceImpl implements NotificationService {
     private static final String PENDING = "PENDING";
     private static final String SENT = "SENT";
     private static final String FAILED = "FAILED";
+    // Carrier-confirmed outcomes for an already-accepted SMS. Kept distinct from
+    // SENT/FAILED (which describe whether the send *request* itself succeeded)
+    // so recoverFailedDeliveries() never re-sends an SMS that MSG24x7 accepted
+    // but the telecom carrier later rejected/delivered.
+    private static final String DELIVERED = "DELIVERED";
+    private static final String DELIVERY_FAILED = "DELIVERY_FAILED";
     private static final int MAX_RETRY_ATTEMPTS = 3;
+    // Separate, small cap for delivery-status polling attempts (not persisted -
+    // passed through the scheduled lambda) so it never interacts with
+    // retryCount / MAX_RETRY_ATTEMPTS, which govern re-sending a failed SMS.
+    private static final int MAX_DELIVERY_STATUS_CHECKS = 3;
     private final NotificationRepository notificationRepository;
     private final EmailSenderService emailSenderService;
     private final NotificationRecipientCacheService recipientCacheService;
@@ -376,8 +389,10 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setUpdatedAt(now);
         notificationRepository.saveAndFlush(notification);
         try {
-            smsSenderService.send(recipient, message, templateId, "FRMS-" + decision + "-" + event.transactionId());
+            String messageId = smsSenderService.send(
+                    recipient, message, templateId, "FRMS-" + decision + "-" + event.transactionId());
             notification.setNotificationStatus(SENT);
+            notification.setMessageId(messageId);
         } catch (Exception ex) {
             notification.setNotificationStatus(FAILED);
             notification.setFailureReason(truncateFailureReason(ex.getMessage()));
@@ -386,6 +401,10 @@ public class NotificationServiceImpl implements NotificationService {
         }
         notification.setUpdatedAt(LocalDateTime.now());
         notificationRepository.save(notification);
+
+        if (SENT.equals(notification.getNotificationStatus()) && StringUtils.hasText(notification.getMessageId())) {
+            scheduleDeliveryStatusCheck(notification.getId(), 0);
+        }
     }
 
     /**
@@ -428,8 +447,9 @@ public class NotificationServiceImpl implements NotificationService {
             } else if (SMS.equals(notification.getNotificationType())) {
                 String templateId = REVIEW.equals(notification.getFraudDecision())
                         ? reviewSmsTemplateId : blockSmsTemplateId;
-                smsSenderService.send(notification.getRecipient(), notification.getMessage(), templateId,
+                String messageId = smsSenderService.send(notification.getRecipient(), notification.getMessage(), templateId,
                         "FRMS-" + notification.getFraudDecision() + "-RETRY-" + notification.getId());
+                notification.setMessageId(messageId);
             } else {
                 return;
             }
@@ -448,6 +468,8 @@ public class NotificationServiceImpl implements NotificationService {
 
         if (FAILED.equals(notification.getNotificationStatus())) {
             scheduleRetry(notification.getId());
+        } else if (SMS.equals(notification.getNotificationType()) && StringUtils.hasText(notification.getMessageId())) {
+            scheduleDeliveryStatusCheck(notification.getId(), 0);
         }
     }
 
@@ -458,6 +480,65 @@ public class NotificationServiceImpl implements NotificationService {
                 .findTop100ByNotificationStatusAndRetryCountLessThanOrderByUpdatedAtAsc(FAILED, MAX_RETRY_ATTEMPTS);
         failedNotifications.forEach(notification -> notificationRetryTaskScheduler.schedule(
                 () -> retryDelivery(notification.getId()), Instant.now()));
+    }
+
+    /**
+     * Checks whether an already-accepted SMS was actually delivered by the telecom
+     * carrier, using the MessageId MSG24x7 returned at send time. This does not
+     * re-send anything - it only reconciles notificationStatus from SENT to
+     * DELIVERED/DELIVERY_FAILED. Runs on notificationRetryTaskScheduler so it never
+     * blocks the fraud-event/Kafka consumer thread. The attempt counter is passed
+     * through the lambda (not persisted) so it can't interfere with retryCount,
+     * which is reserved for send-failure retries.
+     */
+    private void scheduleDeliveryStatusCheck(UUID notificationId, int attempt) {
+        if (attempt >= MAX_DELIVERY_STATUS_CHECKS) {
+            log.warn("Giving up on delivery status confirmation notificationId={} after {} checks",
+                    notificationId, attempt);
+            return;
+        }
+        long delayMillis = switch (attempt) {
+            case 0 -> 3_000L;
+            case 1 -> 7_000L;
+            default -> 15_000L;
+        };
+        notificationRetryTaskScheduler.schedule(
+                () -> checkSmsDeliveryStatus(notificationId, attempt), Instant.now().plusMillis(delayMillis));
+    }
+
+    private void checkSmsDeliveryStatus(UUID notificationId, int attempt) {
+        Notification notification = notificationRepository.findById(notificationId).orElse(null);
+        if (notification == null
+                || !SMS.equals(notification.getNotificationType())
+                || !SENT.equals(notification.getNotificationStatus())
+                || !StringUtils.hasText(notification.getMessageId())) {
+            return;
+        }
+
+        SmsDeliveryStatus result;
+        try {
+            result = smsSenderService.checkDeliveryStatus(notification.getMessageId());
+        } catch (Exception ex) {
+            log.warn("Delivery status check errored notificationId={}, attempt={}", notificationId, attempt, ex);
+            scheduleDeliveryStatusCheck(notificationId, attempt + 1);
+            return;
+        }
+
+        if (result.delivered()) {
+            notification.setNotificationStatus(DELIVERED);
+            notification.setUpdatedAt(LocalDateTime.now());
+            notificationRepository.save(notification);
+            log.info("SMS delivery confirmed by carrier notificationId={}", notificationId);
+        } else if (result.failed()) {
+            notification.setNotificationStatus(DELIVERY_FAILED);
+            notification.setFailureReason(truncateFailureReason(result.reason()));
+            notification.setUpdatedAt(LocalDateTime.now());
+            notificationRepository.save(notification);
+            log.warn("SMS rejected by carrier notificationId={}, reason={}", notificationId, result.reason());
+        } else {
+            // Still in flight at the carrier (e.g. "UNDELIV"/pending) - check again if attempts remain.
+            scheduleDeliveryStatusCheck(notificationId, attempt + 1);
+        }
     }
 
     private String truncateFailureReason(String reason) {
@@ -496,14 +577,28 @@ public class NotificationServiceImpl implements NotificationService {
         };
     }
 
+    /**
+     * IMPORTANT: this text must match the DLT-approved MSG24x7 template EXACTLY
+     * (only the two {#var#} values - Reference ID, then Score - may differ),
+     * otherwise the telecom operator's DLT filter will reject the SMS even if
+     * MSG24x7 accepts the API call. Keep this in sync with the "review" and
+     * "block" templates in the MSG24x7 Manage Template dashboard.
+     */
     private String buildSmsMessage(FraudEvent event, String decision) {
+        // Line breaks are part of the DLT-approved template text, not just
+        // cosmetic - a single-line (space-separated) version of this same
+        // wording was accepted by MSG24x7's API but silently never delivered,
+        // because it no longer matched the registered template exactly. Keep
+        // these \n exactly as tested/confirmed delivered.
         int riskScore = event.totalRiskScore() == null ? 0 : event.totalRiskScore();
         if (REVIEW.equals(decision)) {
-            return "Secure Edge: Fraud review required for transaction " + event.transactionId()
-                    + ". Risk score: " + riskScore + ". Please review in FRMS.";
+            return "Dear Admin,\nA case has been flagged for your review.\nReference ID: "
+                    + event.transactionId() + "\nScore: " + riskScore
+                    + "\nPlease review the case in the Admin Panel.\nRegards,\nSecureedge Fintech Pvt Ltd";
         }
-        return "Secure Edge: High-risk transaction " + event.transactionId()
-                + " has been blocked. Risk score: " + riskScore + ". Please review in FRMS.";
+        return "Dear Admin,\nA case has been flagged for further attention.\nReference ID: "
+                + event.transactionId() + "\nScore: " + riskScore
+                + "\nPlease review the case in the Admin Panel.\nRegards,\nSecureedge Fintech Pvt Ltd";
     }
 
     /**
@@ -514,6 +609,7 @@ public class NotificationServiceImpl implements NotificationService {
         String amount = value(data, "amount", "N/A");
         String currency = value(data, "currency", "");
         String channel = value(data, "channel", "N/A");
+        String transactionDate = formatTransactionDate(value(data, "transactionDate", null));
         String location = value(data, "location", null);
         if (!StringUtils.hasText(location)) {
             location = "Latitude: " + value(data, "latitude", "N/A")
@@ -532,6 +628,7 @@ public class NotificationServiceImpl implements NotificationService {
         return "Dear Admin,"
                 + "\n\n" + heading
                 + "\n\nTransaction ID: " + event.transactionId()
+                + "\nTransaction Date: " + transactionDate
                 + "\nAmount: " + amount + (StringUtils.hasText(currency) ? " " + currency : "")
                 + "\nChannel: " + channel
                 + "\nLocation: " + location
@@ -559,6 +656,7 @@ public class NotificationServiceImpl implements NotificationService {
 
         return template
                 .replace("{{transactionId}}", event.transactionId().toString())
+                .replace("{{transactionDate}}", formatTransactionDate(value(data, "transactionDate", null)))
                 .replace("{{amount}}", value(data, "amount", "N/A"))
                 .replace("{{currency}}", value(data, "currency", ""))
                 .replace("{{channel}}", value(data, "channel", "N/A"))
@@ -567,6 +665,25 @@ public class NotificationServiceImpl implements NotificationService {
                 .replace("{{riskScore}}", String.valueOf(event.totalRiskScore() == null ? 0 : event.totalRiskScore()))
                 .replace("{{decisionReason}}", reason)
                 .replace("{{triggeredRules}}", rules);
+    }
+
+    /**
+     * transactionData carries the transaction's real created date/time as an
+     * ISO-8601 string (set once in transaction-service, unchanged all the way
+     * through FraudEvent) - formatted here for the email body. Falls back to
+     * the raw value if it's ever missing/unparsable so a legacy event (sent
+     * before this field existed) doesn't break the email.
+     */
+    private String formatTransactionDate(String rawValue) {
+        if (!StringUtils.hasText(rawValue)) {
+            return "N/A";
+        }
+        try {
+            LocalDateTime parsed = LocalDateTime.parse(rawValue);
+            return parsed.format(DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a"));
+        } catch (DateTimeParseException ex) {
+            return rawValue;
+        }
     }
 
     private String buildDashboardMessage(FraudEvent event, String decision, Map<String, Object> data) {

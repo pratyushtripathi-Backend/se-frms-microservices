@@ -6,26 +6,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Trimmed down to exactly the 5 fields MSG24x7 confirmed are required
+ * (matching PascalCase key names) - the extra fields (templateId,
+ * principleEntityId, isUnicode/isFlash, coRelator, etc.) were accepted by the
+ * API but the SMS silently never reached the phone.
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class Msg24x7SmsRequest {
-    private String senderId;
-    @JsonProperty("is_Unicode") private Boolean isUnicode;
-    @JsonProperty("is_Flash") private Boolean isFlash;
-    private Boolean isRegisteredForDelivery;
-    private String validityPeriod;
-    private Integer dataCoding;
-    private String schedTime;
-    private String groupId;
-    private String message;
-    private String mobileNumbers;
-    private String serviceId;
-    private String coRelator;
-    private String linkId;
-    private String principleEntityId;
-    private String templateId;
-    private String apiKey;
-    private String clientId;
+    @JsonProperty("SenderId") private String senderId;
+    @JsonProperty("Message") private String message;
+    @JsonProperty("MobileNumbers") private String mobileNumbers;
+    @JsonProperty("ApiKey") private String apiKey;
+    @JsonProperty("ClientId") private String clientId;
 }
