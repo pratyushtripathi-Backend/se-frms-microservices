@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.RequestParam;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +69,7 @@ public class ScoringController {
             @RequestParam(name = "year", required = false) Integer year,
             @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-            Pageable pageable
+            @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         log.info(
                 "GET /api/v1/scoring/matched-rules received page={}, size={}, year={}, startDate={}, endDate={}",
@@ -81,7 +83,7 @@ public class ScoringController {
             @RequestParam(name = "year", required = false) Integer year,
             @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-            Pageable pageable
+            @PageableDefault(sort = "createdDate", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         log.info(
                 "GET /api/v1/scoring/history received page={}, size={}, year={}, startDate={}, endDate={}",
