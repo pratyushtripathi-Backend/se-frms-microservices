@@ -5,6 +5,7 @@ import com.se.frms.analytics.dto.ChannelCountResponse;
 import com.se.frms.analytics.dto.DailyTransactionVolumeResponse;
 import com.se.frms.analytics.dto.DecisionCountResponse;
 import com.se.frms.analytics.dto.FraudAnalyticsResponse;
+import com.se.frms.analytics.dto.FraudTrendResponse;
 import com.se.frms.analytics.dto.RulePerformanceResponse;
 import com.se.frms.analytics.service.AnalyticsService;
 import java.time.LocalDate;
@@ -108,5 +109,20 @@ public class AnalyticsController {
     ) {
         log.info("GET /api/v1/analytics/transactions/by-channel received fromDate={}, toDate={}", fromDate, toDate);
         return ResponseEntity.ok(analyticsService.getTransactionsByChannel(fromDate, toDate));
+    }
+
+    @GetMapping("/fraud-trend")
+    public ResponseEntity<List<FraudTrendResponse>> getFraudTrend(
+            @RequestParam(required = false, defaultValue = "month") String groupBy,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
+    ) {
+        log.info(
+                "GET /api/v1/analytics/fraud-trend received groupBy={}, fromDate={}, toDate={}",
+                groupBy,
+                fromDate,
+                toDate
+        );
+        return ResponseEntity.ok(analyticsService.getFraudTrend(groupBy, fromDate, toDate));
     }
 }
