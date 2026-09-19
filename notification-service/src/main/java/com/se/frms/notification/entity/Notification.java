@@ -30,6 +30,9 @@ public class Notification {
     private String fraudDecision;
     private Integer riskScore;
     private String notificationStatus;
+    // Provider (MSG24x7) MessageId for SMS sends only - used to look up real
+    // carrier delivery status later. Not exposed in any frontend response DTO.
+    private String messageId;
     private String alertStatus;
     @Column(nullable = false, columnDefinition = "INTEGER DEFAULT 0")
     private Integer retryCount;

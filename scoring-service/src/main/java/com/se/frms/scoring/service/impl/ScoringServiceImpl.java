@@ -230,7 +230,6 @@ public class ScoringServiceImpl implements ScoringService {
                 matchedRule.getId(),
                 matchedRule.getScoring().getId(),
                 matchedRule.getScoring().getTransactionId(),
-                matchedRule.getRuleId(),
                 matchedRule.getRuleCode(),
                 matchedRule.getRuleName(),
                 matchedRule.getRuleExpression(),

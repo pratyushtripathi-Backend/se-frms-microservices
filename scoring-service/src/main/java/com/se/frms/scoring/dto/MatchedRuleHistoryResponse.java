@@ -7,7 +7,6 @@ public record MatchedRuleHistoryResponse(
         UUID id,
         UUID scoringId,
         UUID transactionId,
-        Integer ruleId,
         String ruleCode,
         String ruleName,
         String ruleExpression,

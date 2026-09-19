@@ -174,7 +174,7 @@ public class TransactionServiceImpl implements TransactionService {
         transaction.setTransactionType(resolveString(request.transactionType(), data, "transactionType", "transaction_type"));
         transaction.setCurrency(resolveString(request.currency(), data, "currency"));
         transaction.setAmount(resolveBigDecimal(request.amount(), data, "amount"));
-        enrichTransactionData(transaction, data);
+        enrichTransactionData(transaction, data, now);
         transaction.setDuplicateTransaction(false);
         transaction.setTransactionData(data);
         transaction.setRemarks(request.remarks());
@@ -185,7 +185,7 @@ public class TransactionServiceImpl implements TransactionService {
         return transaction;
     }
 
-    private void enrichTransactionData(TransactionMaster transaction, Map<String, Object> data) {
+    private void enrichTransactionData(TransactionMaster transaction, Map<String, Object> data, LocalDateTime createdDate) {
         putIfPresent(data, "externalTransactionId", transaction.getExternalTransactionId());
         putIfPresent(data, "ipAddress", transaction.getIpAddress());
         putIfPresent(data, "latitude", transaction.getLatitude());
@@ -196,6 +196,12 @@ public class TransactionServiceImpl implements TransactionService {
         putIfPresent(data, "transactionType", transaction.getTransactionType());
         putIfPresent(data, "currency", transaction.getCurrency());
         putIfPresent(data, "amount", transaction.getAmount());
+        // The transaction's actual create date/time (same value saved as
+        // createdDate below) - stored as an ISO-8601 string so it survives
+        // the Kafka JSON round-trip through FraudEvent.transactionData()
+        // cleanly, same as every other field here. This lets notification-service
+        // show the real transaction time in admin alerts, not evaluation/send time.
+        putIfPresent(data, "transactionDate", createdDate.toString());
     }
 
     private void putIfPresent(Map<String, Object> data, String key, Object value) {
