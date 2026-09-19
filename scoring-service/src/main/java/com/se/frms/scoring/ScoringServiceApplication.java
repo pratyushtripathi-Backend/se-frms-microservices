@@ -7,7 +7,8 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @SpringBootApplication
 @EnableAsync
 public class ScoringServiceApplication {
-    public static void main(String[] args) {
+    public static void main(String[] args)
+    {
         SpringApplication.run(ScoringServiceApplication.class, args);
     }
 }
