@@ -44,7 +44,6 @@ public class DecisionController {
     // whenever the caller doesn't ask for a different sort explicitly.
     @GetMapping
     public ResponseEntity<Page<DecisionResponse>> getAll(
-<<<<<<< Updated upstream
             @RequestParam(name = "year", required = false) Integer year,
             @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
@@ -55,12 +54,6 @@ public class DecisionController {
                 pageable.getPageNumber(), pageable.getPageSize(), year, startDate, endDate
         );
         return ResponseEntity.ok(decisionService.getAll(year, startDate, endDate, pageable));
-=======
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
-    ) {
-        log.info("GET /api/v1/decisions received page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
-        return ResponseEntity.ok(decisionService.getAll(pageable));
->>>>>>> Stashed changes
     }
 
     @GetMapping("/{decisionId}")
