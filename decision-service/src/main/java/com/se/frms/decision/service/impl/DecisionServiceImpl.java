@@ -17,12 +17,11 @@ import com.se.frms.decision.producer.DecisionReviewedEventProducer;
 import com.se.frms.decision.repository.DecisionRepository;
 import com.se.frms.decision.service.DecisionPersistenceService;
 import com.se.frms.decision.service.DecisionService;
-<<<<<<< Updated upstream
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
-=======
+
 import java.time.Instant;
->>>>>>> Stashed changes
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;

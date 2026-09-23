@@ -52,14 +52,32 @@ public class TransactionController {
     @GetMapping
     public ResponseEntity<Page<TransactionDetailsResponse>> getAll(
             Pageable pageable,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String merchantId,
-            @RequestParam(required = false) String userId,
-            @RequestParam(required = false) String channel,
-            @RequestParam(required = false) String transactionType,
-            @RequestParam(required = false) String currency,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
+
+            @RequestParam(value = "status", required = false)
+            String status,
+
+            @RequestParam(value = "merchantId", required = false)
+            String merchantId,
+
+            @RequestParam(value = "userId", required = false)
+            String userId,
+
+            @RequestParam(value = "channel", required = false)
+            String channel,
+
+            @RequestParam(value = "transactionType", required = false)
+            String transactionType,
+
+            @RequestParam(value = "currency", required = false)
+            String currency,
+
+            @RequestParam(value = "fromDate", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate fromDate,
+
+            @RequestParam(value = "toDate", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate toDate
     ) {
         log.info(
                 "GET /api/v1/transactions page={}, size={}, status={}, merchantId={}, userId={}, channel={}, transactionType={}, currency={}, fromDate={}, toDate={}",
@@ -74,22 +92,28 @@ public class TransactionController {
                 fromDate,
                 toDate
         );
-        return ResponseEntity.ok(transactionService.getAll(
-                pageable,
-                status,
-                merchantId,
-                userId,
-                channel,
-                transactionType,
-                currency,
-                fromDate,
-                toDate
-        ));
+
+        return ResponseEntity.ok(
+                transactionService.getAll(
+                        pageable,
+                        status,
+                        merchantId,
+                        userId,
+                        channel,
+                        transactionType,
+                        currency,
+                        fromDate,
+                        toDate
+                )
+        );
     }
 
     @GetMapping("/{transactionId}")
-    public ResponseEntity<TransactionDetailsResponse> getById(@PathVariable UUID transactionId) {
+    public ResponseEntity<TransactionDetailsResponse> getById(
+            @PathVariable("transactionId") UUID transactionId) {
+
         log.info("GET /api/v1/transactions/{} received", transactionId);
+
         return ResponseEntity.ok(transactionService.getById(transactionId));
     }
 }
