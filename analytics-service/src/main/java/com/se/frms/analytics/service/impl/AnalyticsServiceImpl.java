@@ -82,6 +82,28 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     }
 
     @Override
+    @Transactional
+    public void applyDecisionReview(UUID transactionId, String finalDecision) {
+        fraudAnalyticsRepository.findByTransactionId(transactionId).ifPresentOrElse(
+                analytics -> {
+                    String previous = analytics.getFraudDecision();
+                    analytics.setFraudDecision(normalizeDecision(finalDecision));
+                    fraudAnalyticsRepository.save(analytics);
+                    log.info(
+                            "Fraud analytics decision updated from manual review transactionId={}, previousDecision={}, newDecision={}",
+                            transactionId,
+                            previous,
+                            analytics.getFraudDecision()
+                    );
+                },
+                () -> log.warn(
+                        "Decision-reviewed event ignored - no fraud analytics row yet for transactionId={}",
+                        transactionId
+                )
+        );
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Page<FraudAnalyticsResponse> getAll(
             Pageable pageable,

@@ -8,6 +8,7 @@ import com.se.frms.decision.client.ScoringLookupClient;
 import com.se.frms.decision.client.TransactionLookupClient;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionResponse;
+import com.se.frms.decision.producer.DecisionReviewedEventProducer;
 import com.se.frms.decision.repository.DecisionRepository;
 import com.se.frms.decision.service.DecisionPersistenceService;
 import java.lang.reflect.Field;
@@ -37,6 +38,12 @@ class DecisionServiceImplTest {
     @Mock
     private TransactionLookupClient transactionLookupClient;
 
+<<<<<<< Updated upstream
+=======
+    @Mock
+    private DecisionReviewedEventProducer decisionReviewedEventProducer;
+
+>>>>>>> Stashed changes
     private DecisionServiceImpl decisionService;
 
     @BeforeEach
@@ -46,7 +53,12 @@ class DecisionServiceImplTest {
                 decisionPolicyCache,
                 decisionPersistenceService,
                 scoringLookupClient,
+<<<<<<< Updated upstream
                 transactionLookupClient
+=======
+                transactionLookupClient,
+                decisionReviewedEventProducer
+>>>>>>> Stashed changes
         );
         setField("allowMaxScore", 39);
         setField("reviewMaxScore", 69);

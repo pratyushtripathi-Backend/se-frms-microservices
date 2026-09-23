@@ -7,23 +7,28 @@ import com.se.frms.decision.dto.CaseResponse;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionPolicyResponse;
 import com.se.frms.decision.dto.DecisionResponse;
+import com.se.frms.decision.dto.DecisionReviewedEvent;
 import com.se.frms.decision.dto.DecisionReviewRequest;
 import com.se.frms.decision.dto.ScoringLookupResponse;
 import com.se.frms.decision.dto.TransactionLookupResponse;
 import com.se.frms.decision.entity.Decision;
 import com.se.frms.decision.exception.ExternalServiceException;
+import com.se.frms.decision.producer.DecisionReviewedEventProducer;
 import com.se.frms.decision.repository.DecisionRepository;
 import com.se.frms.decision.service.DecisionPersistenceService;
 import com.se.frms.decision.service.DecisionService;
+<<<<<<< Updated upstream
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
+=======
+import java.time.Instant;
+>>>>>>> Stashed changes
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -47,12 +52,7 @@ public class DecisionServiceImpl implements DecisionService {
     private final DecisionPersistenceService decisionPersistenceService;
     private final ScoringLookupClient scoringLookupClient;
     private final TransactionLookupClient transactionLookupClient;
-
-    @Value("${decision.threshold.allow-max:39}")
-    private Integer allowMaxScore;
-
-    @Value("${decision.threshold.review-max:69}")
-    private Integer reviewMaxScore;
+    private final DecisionReviewedEventProducer decisionReviewedEventProducer;
 
     @Override
     public DecisionResponse process(DecisionRequest request) {
@@ -190,6 +190,20 @@ public class DecisionServiceImpl implements DecisionService {
                 saved.getFinalDecision()
         );
 
+        // Best-effort: analytics-service's own copy of this decision only
+        // ever reflects whatever fraud-engine-service originally published.
+        // Without this, a case resolved here keeps counting toward the
+        // dashboard's "Active Case" number forever. A skipped publish (e.g.
+        // Kafka briefly unavailable) never fails this request - the review
+        // itself is already saved above regardless.
+        decisionReviewedEventProducer.publish(new DecisionReviewedEvent(
+                saved.getTransactionId(),
+                saved.getId(),
+                previousDecision,
+                saved.getFinalDecision(),
+                Instant.now()
+        ));
+
         return mapToResponse(saved);
     }
 
@@ -237,26 +251,31 @@ public class DecisionServiceImpl implements DecisionService {
     }
 
     private String resolveDecision(Integer totalRiskScore, DecisionPolicyResponse activePolicy) {
-        if (activePolicy != null) {
-            if (isBetween(totalRiskScore, activePolicy.allowMinScore(), activePolicy.allowMaxScore())) {
-                return ALLOW;
-            }
-            if (isBetween(totalRiskScore, activePolicy.reviewMinScore(), activePolicy.reviewMaxScore())) {
-                return REVIEW;
-            }
-            if (isBetween(totalRiskScore, activePolicy.blockMinScore(), activePolicy.blockMaxScore())) {
-                return BLOCK;
-            }
-            return REVIEW;
+        // No hardcoded score bands here on purpose: a fraud decision must
+        // only ever be made against an admin-configured Decision Policy.
+        // If the policy cache hasn't been populated yet (fresh startup, or
+        // the monolith -> rule-cache-service -> decision-service sync
+        // hasn't completed), fail loudly instead of silently guessing
+        // Allow/Review/Block from made-up thresholds.
+        if (activePolicy == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "No active decision policy is configured. Cannot calculate a fraud decision without an admin-configured policy."
+            );
         }
 
-        if (totalRiskScore <= allowMaxScore) {
+        if (isBetween(totalRiskScore, activePolicy.allowMinScore(), activePolicy.allowMaxScore())) {
             return ALLOW;
         }
-        if (totalRiskScore <= reviewMaxScore) {
+        if (isBetween(totalRiskScore, activePolicy.reviewMinScore(), activePolicy.reviewMaxScore())) {
             return REVIEW;
         }
-        return BLOCK;
+        if (isBetween(totalRiskScore, activePolicy.blockMinScore(), activePolicy.blockMaxScore())) {
+            return BLOCK;
+        }
+        // Score falls in a gap between the admin-configured ranges (not a
+        // hardcoded threshold) - send to manual review rather than guess.
+        return REVIEW;
     }
 
     private String buildDecisionReason(
@@ -264,24 +283,17 @@ public class DecisionServiceImpl implements DecisionService {
             String finalDecision,
             DecisionPolicyResponse activePolicy
     ) {
-        if (activePolicy != null) {
-            return switch (finalDecision) {
-                case ALLOW -> "Risk score " + totalRiskScore + " is within admin policy allow threshold "
-                        + activePolicy.allowMinScore() + "-" + activePolicy.allowMaxScore();
-                case REVIEW -> "Risk score " + totalRiskScore + " is within admin policy review threshold "
-                        + activePolicy.reviewMinScore() + "-" + activePolicy.reviewMaxScore();
-                case BLOCK -> "Risk score " + totalRiskScore + " is within admin policy block threshold "
-                        + activePolicy.blockMinScore() + "-" + activePolicy.blockMaxScore();
-                default -> "Decision calculated from admin decision policy";
-            };
-        }
-
+        // resolveDecision() always throws before reaching here when
+        // activePolicy is null, so this only ever runs with a real,
+        // admin-configured policy - no hardcoded-threshold branch needed.
         return switch (finalDecision) {
-            case ALLOW -> "Risk score " + totalRiskScore + " is within allow threshold 0-" + allowMaxScore;
-            case REVIEW -> "Risk score " + totalRiskScore + " is within review threshold "
-                    + (allowMaxScore + 1) + "-" + reviewMaxScore;
-            case BLOCK -> "Risk score " + totalRiskScore + " is above review threshold " + reviewMaxScore;
-            default -> "Decision calculated from configured thresholds";
+            case ALLOW -> "Risk score " + totalRiskScore + " is within admin policy allow threshold "
+                    + activePolicy.allowMinScore() + "-" + activePolicy.allowMaxScore();
+            case REVIEW -> "Risk score " + totalRiskScore + " is within admin policy review threshold "
+                    + activePolicy.reviewMinScore() + "-" + activePolicy.reviewMaxScore();
+            case BLOCK -> "Risk score " + totalRiskScore + " is within admin policy block threshold "
+                    + activePolicy.blockMinScore() + "-" + activePolicy.blockMaxScore();
+            default -> "Decision calculated from admin decision policy";
         };
     }
 

@@ -16,6 +16,19 @@ import org.springframework.data.domain.Pageable;
 public interface AnalyticsService {
     void handleFraudEvent(FraudEvent event);
 
+    /**
+     * Applies a manual Allow/Block review (made in Case Management, via
+     * decision-service) to this service's own copy of the decision, so
+     * "Active Case" / reviewCount stops counting cases that have already
+     * been resolved. Only touches fraud_decision - amount, channel,
+     * triggeredRules and transactionData are left as originally recorded
+     * by handleFraudEvent, since this event carries none of that detail.
+     * A no-op (with a warning logged) if no row exists yet for the
+     * transaction - the original fraud event just hasn't been consumed
+     * yet, and there's nothing to correct.
+     */
+    void applyDecisionReview(UUID transactionId, String finalDecision);
+
     Page<FraudAnalyticsResponse> getAll(Pageable pageable, String fraudDecision, LocalDate fromDate, LocalDate toDate);
 
     FraudAnalyticsResponse getById(UUID analyticsId);
