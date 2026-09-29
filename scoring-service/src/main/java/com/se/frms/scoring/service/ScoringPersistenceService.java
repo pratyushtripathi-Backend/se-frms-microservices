@@ -39,19 +39,14 @@ public class ScoringPersistenceService {
             scoring.setTotalRiskScore(totalRiskScore);
             scoring.setStatus(true);
             scoring.setCreatedBy(SYSTEM_USER);
-            scoring = scoringRepository.save(scoring);
-            Scoring savedScoring = scoring;
-
-            List<MatchedRule> matchedRules = matchedResults.stream()
-                    .map(result -> buildMatchedRule(savedScoring, result))
-                    .toList();
-            matchedRuleRepository.saveAll(matchedRules);
+            Scoring savedScoring = scoringRepository.save(scoring);
+            matchedRuleRepository.save(buildMatchedRule(savedScoring, matchedResults));
 
             log.info(
                     "Scoring persisted asynchronously transactionId={}, scoringId={}, matchedRuleCount={}, elapsedMs={}",
                     transactionId,
                     scoringId,
-                    matchedRules.size(),
+                    matchedResults.size(),
                     elapsedMillis(startedAt)
             );
         } catch (RuntimeException ex) {
@@ -64,15 +59,14 @@ public class ScoringPersistenceService {
         }
     }
 
-    private MatchedRule buildMatchedRule(Scoring scoring, RuleEvaluationResult result) {
+    private MatchedRule buildMatchedRule(Scoring scoring, List<RuleEvaluationResult> results) {
         MatchedRule matchedRule = new MatchedRule();
         matchedRule.setScoring(scoring);
-        matchedRule.setRuleId(result.rule().ruleId());
-        matchedRule.setRuleCode(result.rule().ruleCode());
-        matchedRule.setRuleName(result.rule().ruleName());
-        matchedRule.setRuleExpression(result.rule().ruleExpression());
-        matchedRule.setRuleScore(result.rule().ruleScore());
-        matchedRule.setCalculatedScore(result.calculatedScore());
+        matchedRule.setRuleCodes(results.stream().map(result -> result.rule().ruleCode()).toList());
+        matchedRule.setRuleNames(results.stream().map(result -> result.rule().ruleName()).toList());
+        matchedRule.setRuleExpressions(results.stream().map(result -> result.rule().ruleExpression()).toList());
+        matchedRule.setRuleScores(results.stream().map(result -> result.rule().ruleScore()).toList());
+        matchedRule.setCalculatedScores(results.stream().map(RuleEvaluationResult::calculatedScore).toList());
         matchedRule.setStatus(true);
         matchedRule.setCreatedBy(SYSTEM_USER);
         return matchedRule;

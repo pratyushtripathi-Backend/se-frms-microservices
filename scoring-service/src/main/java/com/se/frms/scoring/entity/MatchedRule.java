@@ -1,6 +1,5 @@
 package com.se.frms.scoring.entity;
 
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -13,46 +12,46 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.annotations.Check;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Getter
 @Setter
 @Entity
 @Table(name = "se_frms_matched_rule")
-@Check(constraints = "rule_score >= 0 AND calculated_score >= 0")
 public class MatchedRule {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
-    @JoinColumn(name = "scoring_id", nullable = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "scoring_id", nullable = false, unique = true)
     private Scoring scoring;
 
-    @Column(name = "rule_id", nullable = false)
-    private Integer ruleId;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "rule_code", columnDefinition = "jsonb", nullable = false)
+    private List<String> ruleCodes;
 
-    @Column(name = "rule_code", nullable = false)
-    private String ruleCode;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "rule_name", columnDefinition = "jsonb", nullable = false)
+    private List<String> ruleNames;
 
-    @Column(name = "rule_name", nullable = false)
-    private String ruleName;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "rule_expression", columnDefinition = "jsonb", nullable = false)
+    private List<String> ruleExpressions;
 
-    @Column(name = "rule_expression", columnDefinition = "TEXT")
-    private String ruleExpression;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "rule_score", columnDefinition = "jsonb", nullable = false)
+    private List<Integer> ruleScores;
 
-    @Column(name = "rule_score", nullable = false)
-    private Integer ruleScore;
-
-    @Column(name = "calculated_score", nullable = false)
-    private Integer calculatedScore;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "calculated_score", columnDefinition = "jsonb", nullable = false)
+    private List<Integer> calculatedScores;
 
     @Column(nullable = false)
     private Boolean status;
@@ -69,18 +68,15 @@ public class MatchedRule {
     @PrePersist
     public void prePersist() {
         LocalDateTime now = LocalDateTime.now();
-        if (createdDate == null) {
-            createdDate = now;
-        }
-        if (updatedAt == null) {
-            updatedAt = now;
-        }
-        if (status == null) {
-            status = true;
-        }
-        if (createdBy == null || createdBy.isBlank()) {
-            createdBy = "SCORING_SERVICE";
-        }
+        if (createdDate == null) createdDate = now;
+        if (updatedAt == null) updatedAt = now;
+        if (status == null) status = true;
+        if (createdBy == null || createdBy.isBlank()) createdBy = "SCORING_SERVICE";
+        if (ruleCodes == null) ruleCodes = List.of();
+        if (ruleNames == null) ruleNames = List.of();
+        if (ruleExpressions == null) ruleExpressions = List.of();
+        if (ruleScores == null) ruleScores = List.of();
+        if (calculatedScores == null) calculatedScores = List.of();
     }
 
     @PreUpdate
