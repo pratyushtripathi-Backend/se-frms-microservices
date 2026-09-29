@@ -1,5 +1,9 @@
 package com.se.frms.notification.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -7,10 +11,21 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
+/**
+ * One row per transaction + fraud decision (unique). Channel-wise delivery
+ * state lives in notification_details (JSONB); see NotificationDetails.
+ */
 @Getter
 @Setter
 @Entity
@@ -21,24 +36,100 @@ public class Notification {
     private UUID id;
 
     private UUID transactionId;
-    private String notificationType;
-    private String recipient;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "notification_details", columnDefinition = "jsonb")
+    private NotificationDetails notificationDetails = new NotificationDetails();
+
+    /** Dashboard alert subject / message. Email and SMS text is inside notificationDetails. */
     private String subject;
     @Lob
     @Column(columnDefinition = "TEXT")
     private String message;
     private String fraudDecision;
     private Integer riskScore;
-    private String notificationStatus;
-    // Provider (MSG24x7) MessageId for SMS sends only - used to look up real
-    // carrier delivery status later. Not exposed in any frontend response DTO.
-    private String messageId;
-    private String alertStatus;
-    @Column(nullable = false, columnDefinition = "INTEGER DEFAULT 0")
-    private Integer retryCount;
-    private String failureReason;
     private Boolean status;
     private String createdBy;
     private LocalDateTime createdDate;
     private LocalDateTime updatedAt;
+
+    /*
+     * ---- JSON stored in notification_details ----
+     * {
+     *   "DASHBOARD": { "status": "SENT" },
+     *   "EMAIL": { "subject": "...", "message": "...",
+     *              "recipients": { "admin@x.com": { "status": "SENT", "retryCount": 0 } } },
+     *   "SMS":   { "message": "...",
+     *              "recipients": { "919876543210": { "status": "DELIVERED", "messageId": "M1", "retryCount": 0 } } }
+     * }
+     * IMPORTANT: after the row is first inserted, never update notification_details by
+     * saving the entity (that rewrites the whole JSON and can overwrite a concurrent
+     * retry / delivery-status update). Use the jsonb_set update queries in
+     * NotificationRepository, which change only one entry.
+     */
+
+    @Data
+    @NoArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class NotificationDetails {
+
+        @JsonProperty("DASHBOARD")
+        private DashboardDelivery dashboard;
+
+        @JsonProperty("EMAIL")
+        private ChannelDelivery email;
+
+        @JsonProperty("SMS")
+        private ChannelDelivery sms;
+
+        @JsonIgnore
+        public ChannelDelivery channelFor(String channel) {
+            if ("EMAIL".equals(channel)) {
+                return email;
+            }
+            if ("SMS".equals(channel)) {
+                return sms;
+            }
+            return null;
+        }
+
+        @JsonIgnore
+        public RecipientDelivery recipientFor(String channel, String recipient) {
+            ChannelDelivery channelDelivery = channelFor(channel);
+            return channelDelivery == null || channelDelivery.getRecipients() == null
+                    ? null
+                    : channelDelivery.getRecipients().get(recipient);
+        }
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class DashboardDelivery {
+        private String status;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ChannelDelivery {
+        private String subject;
+        private String message;
+        private Map<String, RecipientDelivery> recipients = new LinkedHashMap<>();
+    }
+
+    @Data
+    @NoArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RecipientDelivery {
+        private String status;
+        private String messageId;
+        private Integer retryCount;
+        private String failureReason;
+    }
 }

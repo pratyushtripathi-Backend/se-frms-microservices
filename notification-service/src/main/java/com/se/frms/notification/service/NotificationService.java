@@ -3,7 +3,6 @@ package com.se.frms.notification.service;
 import com.se.frms.notification.dto.FraudEvent;
 import com.se.frms.notification.dto.NotificationListResponse;
 import com.se.frms.notification.dto.NotificationResponse;
-import com.se.frms.notification.dto.UpdateAlertStatusRequest;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,7 +16,6 @@ public interface NotificationService {
             String notificationType,
             String fraudDecision,
             String notificationStatus,
-            String alertStatus,
             String recipient,
             Pageable pageable
     );
@@ -27,7 +25,6 @@ public interface NotificationService {
             String notificationType,
             String fraudDecision,
             String notificationStatus,
-            String alertStatus,
             String recipient,
             Integer page,
             Integer size
@@ -38,7 +35,6 @@ public interface NotificationService {
             String notificationType,
             String fraudDecision,
             String notificationStatus,
-            String alertStatus,
             String recipient,
             Pageable pageable
     );
@@ -48,7 +44,6 @@ public interface NotificationService {
             String notificationType,
             String fraudDecision,
             String notificationStatus,
-            String alertStatus,
             String recipient,
             Integer page,
             Integer size
@@ -58,5 +53,4 @@ public interface NotificationService {
 
     Page<NotificationResponse> getNotificationsByTransactionId(UUID transactionId, Pageable pageable);
 
-    NotificationResponse updateAlertStatus(UUID notificationId, UpdateAlertStatusRequest request);
 }
