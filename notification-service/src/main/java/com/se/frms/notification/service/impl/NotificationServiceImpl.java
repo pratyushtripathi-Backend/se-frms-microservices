@@ -66,6 +66,11 @@ public class NotificationServiceImpl implements NotificationService {
     private static final String SMS = "SMS";
     private static final String REVIEW = "REVIEW";
     private static final String BLOCK = "BLOCK";
+    // Duplicate transactions are blocked by transaction-service, which sends
+    // fraudDecision=DUPLICATE_FRAUD. Handled exactly like BLOCK (dashboard +
+    // email + SMS), only labelled "Duplicate" so admins can tell it apart.
+    // SMS uses the approved BLOCK DLT template until a duplicate one is approved.
+    private static final String DUPLICATE = "DUPLICATE";
     private static final String PENDING = "PENDING";
     private static final String SENT = "SENT";
     private static final String FAILED = "FAILED";
@@ -136,7 +141,7 @@ public class NotificationServiceImpl implements NotificationService {
         // budget, not when handleFraudEvent() finishes entirely.
         log.info("Dashboard notification ready transactionId={}", event.transactionId());
 
-        if (BLOCK.equals(decision) || REVIEW.equals(decision)) {
+        if (BLOCK.equals(decision) || REVIEW.equals(decision) || DUPLICATE.equals(decision)) {
             sendConfiguredAdminEmails(notification.getId(), event, decision, data);
             sendConfiguredAdminSms(notification.getId(), event, decision);
         }
@@ -590,13 +595,26 @@ public class NotificationServiceImpl implements NotificationService {
         if (REVIEW.equalsIgnoreCase(fraudDecision)) {
             return REVIEW;
         }
+        if ("DUPLICATE_FRAUD".equalsIgnoreCase(fraudDecision) || DUPLICATE.equalsIgnoreCase(fraudDecision)) {
+            return DUPLICATE;
+        }
         return BLOCK;
+    }
+
+    private String decisionReason(FraudEvent event, String decision) {
+        if (StringUtils.hasText(event.decisionReason())) {
+            return event.decisionReason();
+        }
+        return DUPLICATE.equals(decision)
+                ? "Duplicate transaction detected - the same transaction was already submitted."
+                : "Decision calculated from configured risk-score policy.";
     }
 
     private String dashboardSubject(String decision) {
         return switch (decision) {
             case "ALLOW" -> "Transaction Allowed";
             case REVIEW -> "Transaction Requires Review";
+            case DUPLICATE -> "Duplicate Transaction Blocked";
             default -> "High Risk Transaction Blocked";
         };
     }
@@ -604,6 +622,7 @@ public class NotificationServiceImpl implements NotificationService {
     private String emailSubject(String decision) {
         return switch (decision) {
             case REVIEW -> "[FRMS] Review Required: Transaction Requires Attention";
+            case DUPLICATE -> "[FRMS] Duplicate Alert: Duplicate Transaction Blocked";
             default -> "[FRMS] Block Alert: High-Risk Transaction Detected";
         };
     }
@@ -646,15 +665,17 @@ public class NotificationServiceImpl implements NotificationService {
             location = "Latitude: " + value(data, "latitude", "N/A")
                     + ", Longitude: " + value(data, "longitude", "N/A");
         }
-        String reason = StringUtils.hasText(event.decisionReason())
-                ? event.decisionReason()
-                : "Decision calculated from configured risk-score policy.";
-        String heading = REVIEW.equals(decision)
-                ? "A transaction requires manual fraud review."
-                : "A high-risk transaction has been blocked.";
-        String action = REVIEW.equals(decision)
-                ? "Review this transaction and update the alert status."
-                : "Verify the blocked transaction and take any required follow-up action.";
+        String reason = decisionReason(event, decision);
+        String heading = switch (decision) {
+            case REVIEW -> "A transaction requires manual fraud review.";
+            case DUPLICATE -> "A duplicate transaction has been detected and blocked.";
+            default -> "A high-risk transaction has been blocked.";
+        };
+        String action = switch (decision) {
+            case REVIEW -> "Review this transaction and update the alert status.";
+            case DUPLICATE -> "Verify the duplicate transaction and take any required follow-up action.";
+            default -> "Verify the blocked transaction and take any required follow-up action.";
+        };
 
         return "Dear Admin,"
                 + "\n\n" + heading
@@ -679,9 +700,7 @@ public class NotificationServiceImpl implements NotificationService {
             location = "Latitude: " + value(data, "latitude", "N/A")
                     + ", Longitude: " + value(data, "longitude", "N/A");
         }
-        String reason = StringUtils.hasText(event.decisionReason())
-                ? event.decisionReason()
-                : "Decision calculated from configured risk-score policy.";
+        String reason = decisionReason(event, decision);
         String rules = event.triggeredRules() == null || event.triggeredRules().isEmpty()
                 ? "None" : event.triggeredRules().toString();
 
@@ -726,9 +745,7 @@ public class NotificationServiceImpl implements NotificationService {
             location = "Latitude: " + value(data, "latitude", "N/A")
                     + ", Longitude: " + value(data, "longitude", "N/A");
         }
-        String reason = StringUtils.hasText(event.decisionReason())
-                ? event.decisionReason()
-                : "Decision calculated from configured risk-score policy.";
+        String reason = decisionReason(event, decision);
         return "Transaction ID: " + event.transactionId()
                 + "\nAmount: " + amount + (StringUtils.hasText(currency) ? " " + currency : "")
                 + "\nChannel: " + channel
