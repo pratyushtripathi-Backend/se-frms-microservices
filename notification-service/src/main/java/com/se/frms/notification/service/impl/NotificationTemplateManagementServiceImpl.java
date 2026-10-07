@@ -108,9 +108,9 @@ public class NotificationTemplateManagementServiceImpl implements NotificationTe
 
     private String normalizeSupportedDecision(String decision) {
         String normalized = decision.trim().toUpperCase(Locale.ROOT);
-        if (!"REVIEW".equals(normalized) && !"BLOCK".equals(normalized)) {
+        if (!"REVIEW".equals(normalized) && !"BLOCK".equals(normalized) && !"DUPLICATE".equals(normalized)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only REVIEW and BLOCK email templates are supported");
+                    "Only REVIEW, BLOCK and DUPLICATE email templates are supported");
         }
         return normalized;
     }

@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Management endpoints for REVIEW and BLOCK email templates. */
+/** Management endpoints for REVIEW, BLOCK and DUPLICATE email templates. */
 @RestController
 @RequestMapping("/api/v1/notification-templates")
 @RequiredArgsConstructor
