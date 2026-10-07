@@ -49,6 +49,15 @@ public class Notification {
     private String fraudDecision;
     private Integer riskScore;
     private Boolean status;
+    /**
+     * Shared read state of the dashboard alert (one flag for all admins). Stored
+     * here, not in the browser, so the unread bell count survives logout / cleared
+     * storage. Only ever changed by NotificationRepository.markAllReadUpTo() - a
+     * column-only UPDATE, so it never touches notification_details.
+     */
+    @Column(name = "is_read", nullable = false)
+    private Boolean read = false;
+    private LocalDateTime readAt;
     private String createdBy;
     private LocalDateTime createdDate;
     private LocalDateTime updatedAt;

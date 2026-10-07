@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,6 +48,21 @@ public class NotificationController {
         return ResponseEntity.ok(PageResponse.of(notificationService.getNotifications(
                 null, "DASHBOARD", fraudDecision, null, null, pageable
         )));
+    }
+
+    /** Unread dashboard notification count for the header bell (shared by all admins). */
+    @GetMapping("/unread-count")
+    public ResponseEntity<UnreadCountResponse> getUnreadCount() {
+        return ResponseEntity.ok(new UnreadCountResponse(notificationService.getUnreadCount()));
+    }
+
+    /** Marks all notifications as read - called when an admin opens the notifications view. */
+    @PatchMapping("/read-all")
+    public ResponseEntity<UnreadCountResponse> markAllAsRead() {
+        return ResponseEntity.ok(new UnreadCountResponse(notificationService.markAllAsRead()));
+    }
+
+    public record UnreadCountResponse(long unreadCount) {
     }
 
     @GetMapping("/{notificationId}")

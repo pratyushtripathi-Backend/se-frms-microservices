@@ -20,7 +20,8 @@ public record NotificationResponse(
         Boolean status,
         String createdBy,
         LocalDateTime createdDate,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Boolean read
 ) {
     /**
      * One channel: DASHBOARD, EMAIL or SMS. subject is set for EMAIL, recipients

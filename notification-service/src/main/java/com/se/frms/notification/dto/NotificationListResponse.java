@@ -14,6 +14,7 @@ public record NotificationListResponse(
         List<NotificationResponse.Channel> channels,
         String createdBy,
         LocalDateTime createdDate,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Boolean read
 ) {
 }

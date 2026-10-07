@@ -1,11 +1,11 @@
 package com.se.frms.fraudengine.service.impl;
 
 import com.se.frms.fraudengine.cache.ActiveBlacklistCache;
+import com.se.frms.fraudengine.cache.BlacklistIndex;
 import com.se.frms.fraudengine.cache.ActiveRuleCache;
 import com.se.frms.fraudengine.cache.GeocodeCache;
 import com.se.frms.fraudengine.client.DecisionClient;
 import com.se.frms.fraudengine.client.ScoringClient;
-import com.se.frms.fraudengine.dto.ActiveBlacklistResponse;
 import com.se.frms.fraudengine.dto.ActiveRuleResponse;
 import com.se.frms.fraudengine.dto.DecisionRequest;
 import com.se.frms.fraudengine.dto.DecisionResponse;
@@ -81,21 +81,28 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
 
         long rulesStartedAt = System.nanoTime();
         List<ActiveRuleResponse> activeRules = activeRuleCache.getActiveRules();
-        List<ActiveRuleResponse> blacklistVirtualRules = buildBlacklistVirtualRules();
+        long activeRulesMs = elapsedMillis(rulesStartedAt);
+
+        long locationStartedAt = System.nanoTime();
+        Map<String, Object> scoringTransactionData = buildEnrichedTransactionData(request.transactionData());
+        long locationMs = elapsedMillis(locationStartedAt);
+
+        // Blacklist matching needs the enriched data (resolvedLocation), so it runs
+        // after location resolution. Only entries that actually match this
+        // transaction become rules - the request to Scoring Service no longer grows
+        // with the size of the blacklist.
+        long blacklistStartedAt = System.nanoTime();
+        List<ActiveRuleResponse> blacklistVirtualRules = buildMatchedBlacklistRules(scoringTransactionData);
         List<ActiveRuleResponse> combinedRules = new ArrayList<>(activeRules.size() + blacklistVirtualRules.size());
         combinedRules.addAll(activeRules);
         combinedRules.addAll(blacklistVirtualRules);
-        long rulesMs = elapsedMillis(rulesStartedAt);
+        long rulesMs = activeRulesMs + elapsedMillis(blacklistStartedAt);
         log.info(
                 "Using active rule cache transactionId={}, ruleCount={}, blacklistVirtualRuleCount={}",
                 request.transactionId(),
                 activeRules.size(),
                 blacklistVirtualRules.size()
         );
-
-        long locationStartedAt = System.nanoTime();
-        Map<String, Object> scoringTransactionData = buildEnrichedTransactionData(request.transactionData());
-        long locationMs = elapsedMillis(locationStartedAt);
 
         long scoringStartedAt = System.nanoTime();
         ScoringResponse scoringResponse = scoringClient.score(new ScoringRequest(
@@ -199,29 +206,47 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
     }
 
     /**
-     * Turns each active IP / DEVICE / LOCATION blacklist cache entry into a synthetic
-     * "virtual rule" shaped exactly like a normal ActiveRuleResponse
-     * (ruleExpression = "field == 'value'"). Scoring Service's existing RuleEvaluator
-     * then matches it against transactionData the same way it matches any known
-     * rule, and persists a hit into the existing MatchedRule table with zero changes
-     * to Scoring Service. No direct blacklist lookup/call happens during evaluation -
-     * this only reads from the already-refreshed in-memory cache.
+     * Looks up this transaction's IP / DEVICE / LOCATION value in the pre-built
+     * blacklist index (ActiveBlacklistCache -> BlacklistIndex, rebuilt on each cache
+     * refresh) and returns one synthetic "virtual rule" for each blacklist entry that
+     * actually matches. Each rule is shaped exactly like before
+     * (ruleExpression = "field == 'value'", ruleId = -blacklistId), so Scoring
+     * Service's existing RuleEvaluator scores it and persists a hit into the existing
+     * MatchedRule table with zero changes to Scoring Service.
+     *
+     * The old approach created a virtual rule for EVERY blacklist entry on EVERY
+     * transaction, so the work and the request payload grew with the blacklist. Here
+     * the cost is a few hash lookups regardless of blacklist size. No direct
+     * blacklist lookup/call happens during evaluation - this only reads the
+     * already-refreshed in-memory index. Matching rules (normalization, numeric
+     * comparison, duplicates counted per entry, original ordering) mirror
+     * RuleEvaluator, so the resulting score and matched rules are unchanged.
      */
-    private List<ActiveRuleResponse> buildBlacklistVirtualRules() {
-        List<ActiveBlacklistResponse> activeBlacklist = activeBlacklistCache.getActiveBlacklist();
-        List<ActiveRuleResponse> virtualRules = new ArrayList<>(activeBlacklist.size());
+    private List<ActiveRuleResponse> buildMatchedBlacklistRules(Map<String, Object> scoringTransactionData) {
+        BlacklistIndex index = activeBlacklistCache.getBlacklistIndex();
+        List<BlacklistIndex.IndexedEntry> matches = new ArrayList<>();
+        Map<Integer, String> fieldByOrder = new HashMap<>();
 
-        for (ActiveBlacklistResponse entry : activeBlacklist) {
-            String field = mapBlacklistTypeToField(entry.type());
-            if (field == null || entry.value() == null || entry.value().isBlank()) {
-                continue;
+        for (Map.Entry<String, String> typeToField : BLACKLIST_TYPE_TO_FIELD.entrySet()) {
+            String field = typeToField.getValue();
+            for (BlacklistIndex.IndexedEntry hit : index.match(typeToField.getKey(), scoringTransactionData.get(field))) {
+                matches.add(hit);
+                fieldByOrder.put(hit.order(), field);
             }
+        }
+        if (matches.isEmpty()) {
+            return List.of();
+        }
+        matches.sort(java.util.Comparator.comparingInt(BlacklistIndex.IndexedEntry::order));
 
-            String type = entry.type().toUpperCase(Locale.ROOT);
-            String ruleExpression = field + " == '" + entry.value() + "'";
+        List<ActiveRuleResponse> virtualRules = new ArrayList<>(matches.size());
+        for (BlacklistIndex.IndexedEntry hit : matches) {
+            String field = fieldByOrder.get(hit.order());
+            String type = hit.entry().type().toUpperCase(Locale.ROOT);
+            String ruleExpression = field + " == '" + hit.entry().value() + "'";
 
             virtualRules.add(new ActiveRuleResponse(
-                    -entry.blacklistId(),
+                    -hit.entry().blacklistId(),
                     null,
                     type + "_BLACKLIST_MATCH",
                     type + " Blacklist Match",
@@ -234,13 +259,6 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
         }
 
         return virtualRules;
-    }
-
-    private String mapBlacklistTypeToField(String type) {
-        if (type == null) {
-            return null;
-        }
-        return BLACKLIST_TYPE_TO_FIELD.get(type.toUpperCase(Locale.ROOT));
     }
 
     private boolean isDuplicateFraud(Map<String, Object> transactionData) {

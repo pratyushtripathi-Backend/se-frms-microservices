@@ -113,6 +113,45 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
                                @Param("maxAttempts") int maxAttempts,
                                @Param("now") LocalDateTime now);
 
+    /** Dashboard notifications no admin has read yet (read state is shared by all admins). */
+    @Query(value = """
+            SELECT COUNT(*) FROM se_frms_notification
+            WHERE is_read = false
+              AND COALESCE(jsonb_exists(notification_details, CAST('DASHBOARD' AS text)), false)
+            """, nativeQuery = true)
+    long countUnreadDashboard();
+
+    /**
+     * Marks every unread notification created up to upTo as read. Touches only
+     * is_read / read_at (never notification_details or updated_at), so it cannot
+     * interfere with concurrent email / SMS delivery updates. Returns rows changed.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE se_frms_notification SET is_read = true, read_at = :now
+            WHERE is_read = false AND created_date <= :upTo
+            """, nativeQuery = true)
+    int markAllReadUpTo(@Param("upTo") LocalDateTime upTo, @Param("now") LocalDateTime now);
+
+    /**
+     * Email / SMS entries still PENDING on rows not touched since :cutoff - sends that
+     * were queued or in flight when the service stopped. Rows of [notificationId, channel, recipient].
+     */
+    @Query(value = """
+            SELECT CAST(n.id AS varchar) AS notification_id, c.key AS channel, r.key AS recipient
+            FROM se_frms_notification n
+            CROSS JOIN LATERAL jsonb_each(COALESCE(n.notification_details, CAST('{}' AS jsonb))) c
+            CROSS JOIN LATERAL jsonb_each(
+                CASE WHEN jsonb_typeof(c.value -> 'recipients') = 'object'
+                     THEN c.value -> 'recipients' ELSE CAST('{}' AS jsonb) END) r
+            WHERE r.value ->> 'status' = 'PENDING'
+              AND n.updated_at < :cutoff
+            ORDER BY n.updated_at ASC
+            LIMIT 100
+            """, nativeQuery = true)
+    List<Object[]> findStalePendingDeliveries(@Param("cutoff") LocalDateTime cutoff);
+
     /** FAILED recipient entries that still have retries left: rows of [notificationId, channel, recipient]. */
     @Query(value = """
             SELECT CAST(n.id AS varchar) AS notification_id, c.key AS channel, r.key AS recipient

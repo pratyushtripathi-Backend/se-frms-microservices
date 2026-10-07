@@ -16,6 +16,8 @@ public class ActiveBlacklistCache {
 
     private final BlacklistCacheClient blacklistCacheClient;
     private volatile List<ActiveBlacklistResponse> activeBlacklist = List.of();
+    // Rebuilt on every refresh and swapped in atomically (single volatile write).
+    private volatile BlacklistIndex blacklistIndex = BlacklistIndex.EMPTY;
 
     @PostConstruct
     public void warmUp() {
@@ -26,7 +28,10 @@ public class ActiveBlacklistCache {
     public void refresh() {
         try {
             List<ActiveBlacklistResponse> refreshedBlacklist = blacklistCacheClient.getActiveBlacklist();
-            activeBlacklist = List.copyOf(refreshedBlacklist);
+            List<ActiveBlacklistResponse> snapshot = List.copyOf(refreshedBlacklist);
+            BlacklistIndex refreshedIndex = BlacklistIndex.build(snapshot);
+            activeBlacklist = snapshot;
+            blacklistIndex = refreshedIndex;
             log.info("Active blacklist cache refreshed entryCount={}", activeBlacklist.size());
         } catch (RuntimeException ex) {
             log.warn(
@@ -39,5 +44,9 @@ public class ActiveBlacklistCache {
 
     public List<ActiveBlacklistResponse> getActiveBlacklist() {
         return activeBlacklist;
+    }
+
+    public BlacklistIndex getBlacklistIndex() {
+        return blacklistIndex;
     }
 }

@@ -43,6 +43,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import com.se.frms.notification.config.NotificationDeliveryExecutorConfig.NotificationDeliveryExecutors;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +64,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class NotificationServiceImpl implements NotificationService {
     private static final String SYSTEM_USER = "NOTIFICATION_SERVICE";
     private static final String DASHBOARD = "DASHBOARD";
+    // Pushed after "mark all as read" so every open dashboard refreshes its bell count.
+    private static final String READ_STATE_TOPIC = "/topic/notification-read-state";
     private static final String EMAIL = "EMAIL";
     private static final String SMS = "SMS";
     private static final String REVIEW = "REVIEW";
@@ -80,6 +84,9 @@ public class NotificationServiceImpl implements NotificationService {
     // passed through the scheduled lambda) so it never interacts with
     // retryCount / MAX_RETRY_ATTEMPTS, which govern re-sending a failed SMS.
     private static final int MAX_DELIVERY_STATUS_CHECKS = 3;
+    // An email / SMS still PENDING this long after its row was last touched was
+    // interrupted (service stopped while it was queued / in flight) and is re-sent.
+    private static final long STALE_PENDING_MINUTES = 10;
     /** API sort property -> DB column. Anything else falls back to created_date DESC. */
     private static final Map<String, String> SORT_COLUMNS = Map.of(
             "createdDate", "n.created_date",
@@ -98,6 +105,10 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationTemplateCacheService notificationTemplateCacheService;
     private final SmsSenderService smsSenderService;
     private final TaskScheduler notificationRetryTaskScheduler;
+    // Run every email / SMS provider call (first send, retries, SMS status checks)
+    // so the Kafka consumer thread never waits on them - see handleFraudEvent().
+    // Separate pools: a slow SMS provider never delays emails, and vice versa.
+    private final NotificationDeliveryExecutors deliveryExecutors;
     // Pushes DASHBOARD alerts to "/topic/alerts" for connected WebSocket
     // clients - see findOrCreateNotification().
     private final SimpMessagingTemplate messagingTemplate;
@@ -130,12 +141,14 @@ public class NotificationServiceImpl implements NotificationService {
         String message = buildDashboardMessage(event, decision, data);
 
         Notification notification = findOrCreateNotification(event, decision, dashboardSubject(decision), message);
-        // Marks when the dashboard row is actually queryable, separate from
-        // the slower email/SMS sends below (external network calls) — this
-        // is the timestamp that matters for a "dashboard alert" latency
-        // budget, not when handleFraudEvent() finishes entirely.
+        // Marks when the dashboard row is actually queryable and pushed.
         log.info("Dashboard notification ready transactionId={}", event.transactionId());
 
+        // Email / SMS: here only a PENDING entry per recipient is recorded (fast DB
+        // update, also the duplicate-event guard); the provider calls themselves run
+        // on emailDeliveryExecutor / smsDeliveryExecutor. So this method - and the Kafka consumer -
+        // returns right after the dashboard push, and the next alert is never held
+        // up by email / SMS of the previous one.
         if (BLOCK.equals(decision) || REVIEW.equals(decision)) {
             sendConfiguredAdminEmails(notification.getId(), event, decision, data);
             sendConfiguredAdminSms(notification.getId(), event, decision);
@@ -213,6 +226,25 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(readOnly = true)
     public Page<NotificationResponse> getNotificationsByTransactionId(UUID transactionId, Pageable pageable) {
         return getNotifications(transactionId, null, null, null, null, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long getUnreadCount() {
+        return notificationRepository.countUnreadDashboard();
+    }
+
+    @Override
+    public long markAllAsRead() {
+        LocalDateTime now = LocalDateTime.now();
+        int marked = notificationRepository.markAllReadUpTo(now, now);
+        long unreadCount = notificationRepository.countUnreadDashboard();
+        if (marked > 0) {
+            log.info("Notifications marked as read count={}, remainingUnread={}", marked, unreadCount);
+        }
+        // Read state is shared, so every open dashboard (other admins too) updates its bell.
+        messagingTemplate.convertAndSend(READ_STATE_TOPIC, Map.of("unreadCount", unreadCount));
+        return unreadCount;
     }
 
     /**
@@ -317,6 +349,7 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setFraudDecision(decision);
         notification.setRiskScore(event.totalRiskScore() == null ? 0 : event.totalRiskScore());
         notification.setStatus(true);
+        notification.setRead(false);
         notification.setCreatedBy(SYSTEM_USER);
         notification.setCreatedDate(now);
         notification.setUpdatedAt(now);
@@ -364,13 +397,22 @@ public class NotificationServiceImpl implements NotificationService {
             return; // already handled for this transaction (duplicate event)
         }
 
+        deliveryExecutors.email().execute(
+                () -> deliverEmail(notificationId, event, recipient, subject, message));
+    }
+
+    /** Runs on emailDeliveryExecutor. */
+    private void deliverEmail(UUID notificationId, FraudEvent event, String recipient, String subject, String message) {
+        long startedAt = System.nanoTime();
         try {
             emailSenderService.send(recipient, subject, message);
             updateRecipient(notificationId, EMAIL, recipient, statusPatch(SENT, null), null);
-            log.info("Email alert sent transactionId={}, recipient={}", event.transactionId(), recipient);
+            log.info("Email alert sent transactionId={}, recipient={}, sendMs={}",
+                    event.transactionId(), recipient, elapsedMillis(startedAt));
         } catch (Exception ex) {
             updateRecipient(notificationId, EMAIL, recipient, statusPatch(FAILED, ex.getMessage()), null);
-            log.error("Email alert failed transactionId={}, recipient={}", event.transactionId(), recipient, ex);
+            log.error("Email alert failed transactionId={}, recipient={}, sendMs={}",
+                    event.transactionId(), recipient, elapsedMillis(startedAt), ex);
             scheduleRetry(notificationId, EMAIL, recipient, 0);
         }
     }
@@ -397,18 +439,29 @@ public class NotificationServiceImpl implements NotificationService {
             return; // already handled for this transaction (duplicate event)
         }
 
+        deliveryExecutors.sms().execute(
+                () -> deliverSms(notificationId, event, decision, recipient, message, templateId));
+    }
+
+    /** Runs on smsDeliveryExecutor. */
+    private void deliverSms(UUID notificationId, FraudEvent event, String decision, String recipient,
+                            String message, String templateId) {
+        long startedAt = System.nanoTime();
         String messageId;
         try {
             messageId = smsSenderService.send(
                     recipient, message, templateId, "FRMS-" + decision + "-" + event.transactionId());
         } catch (Exception ex) {
             updateRecipient(notificationId, SMS, recipient, statusPatch(FAILED, ex.getMessage()), null);
-            log.error("SMS alert failed transactionId={}, recipient={}", event.transactionId(), recipient, ex);
+            log.error("SMS alert failed transactionId={}, recipient={}, sendMs={}",
+                    event.transactionId(), recipient, elapsedMillis(startedAt), ex);
             scheduleRetry(notificationId, SMS, recipient, 0);
             return;
         }
 
         updateRecipient(notificationId, SMS, recipient, statusPatch(SENT, null).put("messageId", messageId), null);
+        log.info("SMS alert sent transactionId={}, recipient={}, sendMs={}",
+                event.transactionId(), recipient, elapsedMillis(startedAt));
         if (StringUtils.hasText(messageId)) {
             scheduleDeliveryStatusCheck(notificationId, recipient, 0);
         }
@@ -427,8 +480,11 @@ public class NotificationServiceImpl implements NotificationService {
             case 1 -> 5_000L;
             default -> 30_000L;
         };
+        // The scheduler only waits out the delay; the provider call itself runs on the
+        // delivery pool, so slow retries never block other retries / status checks.
         notificationRetryTaskScheduler.schedule(
-                () -> retryDelivery(notificationId, channel, recipient), Instant.now().plusMillis(delayMillis));
+                () -> deliveryExecutorFor(channel).execute(() -> retryDelivery(notificationId, channel, recipient)),
+                Instant.now().plusMillis(delayMillis));
     }
 
     private void retryDelivery(UUID notificationId, String channel, String recipient) {
@@ -483,16 +539,32 @@ public class NotificationServiceImpl implements NotificationService {
         }
     }
 
-    /** Recover retryable failures left behind if the service restarted mid-retry. */
+    /**
+     * Recover sends left behind if the service stopped: FAILED entries with retries
+     * left, and email / SMS still PENDING long after they were queued (the service
+     * stopped before the delivery pool ran them). A stale PENDING entry is first
+     * marked FAILED - only if it is still PENDING - so the normal retry claim applies.
+     */
     @Scheduled(initialDelay = 60_000L, fixedDelay = 60_000L)
     public void recoverFailedDeliveries() {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(STALE_PENDING_MINUTES);
+        notificationRepository.findStalePendingDeliveries(cutoff).forEach(row -> {
+            UUID notificationId = UUID.fromString(String.valueOf(row[0]));
+            String channel = String.valueOf(row[1]);
+            String recipient = String.valueOf(row[2]);
+            if (updateRecipient(notificationId, channel, recipient,
+                    statusPatch(FAILED, "Interrupted before the send completed"), PENDING)) {
+                log.warn("Stale PENDING delivery marked FAILED for retry notificationId={}, channel={}, recipient={}",
+                        notificationId, channel, recipient);
+            }
+        });
+
         List<Object[]> failedDeliveries = notificationRepository.findRetryableFailedDeliveries(MAX_RETRY_ATTEMPTS);
         failedDeliveries.forEach(row -> {
             UUID notificationId = UUID.fromString(String.valueOf(row[0]));
             String channel = String.valueOf(row[1]);
             String recipient = String.valueOf(row[2]);
-            notificationRetryTaskScheduler.schedule(
-                    () -> retryDelivery(notificationId, channel, recipient), Instant.now());
+            deliveryExecutorFor(channel).execute(() -> retryDelivery(notificationId, channel, recipient));
         });
     }
 
@@ -517,7 +589,8 @@ public class NotificationServiceImpl implements NotificationService {
             default -> 15_000L;
         };
         notificationRetryTaskScheduler.schedule(
-                () -> checkSmsDeliveryStatus(notificationId, recipient, attempt), Instant.now().plusMillis(delayMillis));
+                () -> deliveryExecutors.sms().execute(() -> checkSmsDeliveryStatus(notificationId, recipient, attempt)),
+                Instant.now().plusMillis(delayMillis));
     }
 
     private void checkSmsDeliveryStatus(UUID notificationId, String recipient, int attempt) {
@@ -559,10 +632,19 @@ public class NotificationServiceImpl implements NotificationService {
                 channelMeta.toString(), entry.toString(), LocalDateTime.now()) > 0;
     }
 
-    private void updateRecipient(UUID notificationId, String channel, String recipient,
-                                 ObjectNode patch, String expectedStatus) {
-        notificationRepository.updateRecipient(notificationId, channel, recipient,
-                patch.toString(), expectedStatus, LocalDateTime.now());
+    /** Returns true when the entry was updated (false: missing, or not in expectedStatus). */
+    private boolean updateRecipient(UUID notificationId, String channel, String recipient,
+                                    ObjectNode patch, String expectedStatus) {
+        return notificationRepository.updateRecipient(notificationId, channel, recipient,
+                patch.toString(), expectedStatus, LocalDateTime.now()) > 0;
+    }
+
+    private ThreadPoolTaskExecutor deliveryExecutorFor(String channel) {
+        return SMS.equals(channel) ? deliveryExecutors.sms() : deliveryExecutors.email();
+    }
+
+    private long elapsedMillis(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000;
     }
 
     /** failureReason null -> JSON null -> removed from the entry (e.g. after a successful retry). */
@@ -757,7 +839,8 @@ public class NotificationServiceImpl implements NotificationService {
                 notification.getStatus(),
                 notification.getCreatedBy(),
                 notification.getCreatedDate(),
-                notification.getUpdatedAt()
+                notification.getUpdatedAt(),
+                Boolean.TRUE.equals(notification.getRead())
         );
     }
 
@@ -771,7 +854,8 @@ public class NotificationServiceImpl implements NotificationService {
                 toChannels(notification.getNotificationDetails()),
                 notification.getCreatedBy(),
                 notification.getCreatedDate(),
-                notification.getUpdatedAt()
+                notification.getUpdatedAt(),
+                Boolean.TRUE.equals(notification.getRead())
         );
     }
 
