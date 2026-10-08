@@ -17,6 +17,8 @@ public class TransactionLookupClient {
 
     private final RestClient.Builder directRestClientBuilder;
     private final RestClient.Builder loadBalancedRestClientBuilder;
+    // Built once and reused (thread-safe) instead of building a new client per call.
+    private volatile RestClient restClient;
 
     // Explicit constructor - see ScoringLookupClient for why this isn't
     // @RequiredArgsConstructor.
@@ -36,7 +38,7 @@ public class TransactionLookupClient {
 
     public TransactionLookupResponse getByTransactionId(UUID transactionId) {
         try {
-            return restClientBuilder().build()
+            return restClient()
                     .get()
                     .uri(transactionBaseUrl + transactionPath + "/{transactionId}", transactionId)
                     .retrieve()
@@ -45,6 +47,15 @@ public class TransactionLookupClient {
             log.warn("Transaction Service lookup failed for transactionId={}", transactionId, ex);
             throw new ExternalServiceException("Unable to fetch transaction details", ex);
         }
+    }
+
+    private RestClient restClient() {
+        RestClient client = restClient;
+        if (client == null) {
+            client = restClientBuilder().build();
+            restClient = client;
+        }
+        return client;
     }
 
     private RestClient.Builder restClientBuilder() {

@@ -16,6 +16,8 @@ public class DecisionClient {
 
     private final RestClient.Builder restClientBuilder;
     private final RestClient.Builder directRestClientBuilder;
+    // Built once and reused (thread-safe) instead of building a new client per call.
+    private volatile RestClient restClient;
 
     @Value("${frms.decision.base-url}")
     private String decisionBaseUrl;
@@ -32,7 +34,7 @@ public class DecisionClient {
     public DecisionResponse decide(DecisionRequest request) {
         log.info("Calling Decision Service for transactionId={}, totalRiskScore={}", request.transactionId(), request.totalRiskScore());
         try {
-            DecisionResponse response = restClientBuilder().build()
+            DecisionResponse response = restClient()
                     .post()
                     .uri(decisionBaseUrl + decisionPath)
                     .body(request)
@@ -48,6 +50,15 @@ public class DecisionClient {
             log.error("Decision Service call failed for transactionId={}", request.transactionId(), ex);
             throw new ExternalServiceException("Unable to decide fraud outcome", ex);
         }
+    }
+
+    private RestClient restClient() {
+        RestClient client = restClient;
+        if (client == null) {
+            client = restClientBuilder().build();
+            restClient = client;
+        }
+        return client;
     }
 
     private RestClient.Builder restClientBuilder() {

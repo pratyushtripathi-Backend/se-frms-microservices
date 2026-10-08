@@ -5,6 +5,7 @@ import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
@@ -12,6 +13,8 @@ import org.springframework.web.client.RestClient;
 public class RestClientConfig {
 
     private final CorrelationIdRequestInterceptor correlationIdRequestInterceptor;
+    // Shared pooled HTTP client with timeouts - see HttpClientConfig.
+    private final ClientHttpRequestFactory internalClientHttpRequestFactory;
 
     // Existing bean, left exactly as-is (no interceptor, no @LoadBalanced) so
     // RuleCacheDecisionPolicyClient's literal http://localhost:8093 call
@@ -24,7 +27,7 @@ public class RestClientConfig {
     @Bean
     @Primary
     public RestClient.Builder restClientBuilder() {
-        return RestClient.builder();
+        return RestClient.builder().requestFactory(internalClientHttpRequestFactory);
     }
 
     // New, for the case-management lookups (scoring-service/transaction-service):
@@ -32,7 +35,9 @@ public class RestClientConfig {
     // fraud-engine-service's directRestClientBuilder).
     @Bean
     public RestClient.Builder directLookupRestClientBuilder() {
-        return RestClient.builder().requestInterceptor(correlationIdRequestInterceptor);
+        return RestClient.builder()
+                .requestFactory(internalClientHttpRequestFactory)
+                .requestInterceptor(correlationIdRequestInterceptor);
     }
 
     // Load-balanced builder for service-id URLs (e.g. http://scoring-service
@@ -40,6 +45,8 @@ public class RestClientConfig {
     @Bean
     @LoadBalanced
     public RestClient.Builder loadBalancedLookupRestClientBuilder() {
-        return RestClient.builder().requestInterceptor(correlationIdRequestInterceptor);
+        return RestClient.builder()
+                .requestFactory(internalClientHttpRequestFactory)
+                .requestInterceptor(correlationIdRequestInterceptor);
     }
 }
