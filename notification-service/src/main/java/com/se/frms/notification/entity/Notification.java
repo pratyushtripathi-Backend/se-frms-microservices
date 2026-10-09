@@ -6,14 +6,17 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Lob;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
@@ -21,6 +24,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.data.domain.Persistable;
 
 /**
  * One row per transaction + fraud decision (unique). Channel-wise delivery
@@ -30,10 +34,37 @@ import org.hibernate.type.SqlTypes;
 @Setter
 @Entity
 @Table(name = "se_frms_notification")
-public class Notification {
+public class Notification implements Persistable<UUID> {
+    /**
+     * Assigned in code (UUID.randomUUID()) before the row is saved, so the
+     * dashboard alert can be pushed over WebSocket with its final id BEFORE the
+     * INSERT - see NotificationServiceImpl.findOrCreateNotification().
+     */
     @Id
-    @GeneratedValue
     private UUID id;
+
+    /**
+     * Because the id is assigned in code, Spring Data cannot use "id == null" to
+     * tell a new row from an existing one. Without this flag save() would run a
+     * SELECT before every INSERT. true until the row is saved or loaded.
+     */
+    @Transient
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private boolean newRow = true;
+
+    @Override
+    @JsonIgnore
+    public boolean isNew() {
+        return newRow;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() {
+        this.newRow = false;
+    }
 
     private UUID transactionId;
 
