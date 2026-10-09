@@ -7,6 +7,9 @@ import com.se.frms.notification.repository.NotificationTemplateRepository;
 import com.se.frms.notification.service.NotificationTemplateCacheService;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,8 +33,22 @@ public class NotificationTemplateCacheServiceImpl implements NotificationTemplat
     @Value("${notification.templates.ttl-minutes:60}")
     private long ttlMinutes;
 
+    // Short-lived in-memory copy per template code, so a burst of fraud events does
+    // not do a Redis GET + JSON parse per event. Cleared on every refresh / evict
+    // (template create / update / status change), and expires after
+    // local-cache-ms (default 5 s) so changes made through another instance are
+    // still picked up almost immediately.
+    @Value("${notification.templates.local-cache-ms:5000}")
+    private long localCacheMs;
+
+    private record LocalTemplate(Optional<EmailTemplateContent> content, long loadedAtNanos) {
+    }
+
+    private final Map<String, LocalTemplate> localTemplates = new ConcurrentHashMap<>();
+
     @Override
     public void refreshEmailTemplates() {
+        localTemplates.clear();
         notificationTemplateRepository.findByNotificationType(EMAIL)
                 .forEach(template -> {
                     if (Boolean.TRUE.equals(template.getStatus())) {
@@ -45,6 +62,7 @@ public class NotificationTemplateCacheServiceImpl implements NotificationTemplat
 
     @Override
     public void evictEmailTemplate(String templateCode) {
+        localTemplates.remove(templateCode);
         try {
             stringRedisTemplate.delete(redisKey(templateCode));
         } catch (Exception ex) {
@@ -55,6 +73,16 @@ public class NotificationTemplateCacheServiceImpl implements NotificationTemplat
     @Override
     public EmailTemplateContent getEmailTemplate(String fraudDecision) {
         String templateCode = emailTemplateCode(fraudDecision);
+        LocalTemplate local = localTemplates.get(templateCode);
+        if (local != null && System.nanoTime() - local.loadedAtNanos() < localCacheMs * 1_000_000L) {
+            return local.content().orElse(null);
+        }
+        EmailTemplateContent content = loadEmailTemplate(templateCode);
+        localTemplates.put(templateCode, new LocalTemplate(Optional.ofNullable(content), System.nanoTime()));
+        return content;
+    }
+
+    private EmailTemplateContent loadEmailTemplate(String templateCode) {
         try {
             String cached = stringRedisTemplate.opsForValue().get(redisKey(templateCode));
             if (StringUtils.hasText(cached)) {

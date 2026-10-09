@@ -142,16 +142,21 @@ public class NotificationServiceImpl implements NotificationService {
 
         Notification notification = findOrCreateNotification(event, decision, dashboardSubject(decision), message);
         // Marks when the dashboard row is actually queryable and pushed.
-        log.info("Dashboard notification ready transactionId={}", event.transactionId());
+        log.debug("Dashboard notification ready transactionId={}", event.transactionId());
 
-        // Email / SMS: here only a PENDING entry per recipient is recorded (fast DB
-        // update, also the duplicate-event guard); the provider calls themselves run
-        // on emailDeliveryExecutor / smsDeliveryExecutor. So this method - and the Kafka consumer -
-        // returns right after the dashboard push, and the next alert is never held
-        // up by email / SMS of the previous one.
+        // Email / SMS: everything after the dashboard push - template + recipient
+        // lookup, the PENDING entry per recipient (also the duplicate-event guard)
+        // and the provider calls - runs on emailDeliveryExecutor / smsDeliveryExecutor.
+        // The Kafka consumer thread therefore only does one INSERT + the WebSocket
+        // push per event and immediately takes the next one, so a burst of
+        // transactions no longer queues up behind each other's email / SMS
+        // bookkeeping (which cost ~15-20 ms per event on the consumer thread).
         if (BLOCK.equals(decision) || REVIEW.equals(decision)) {
-            sendConfiguredAdminEmails(notification.getId(), event, decision, data);
-            sendConfiguredAdminSms(notification.getId(), event, decision);
+            UUID notificationId = notification.getId();
+            deliveryExecutors.email().execute(
+                    () -> sendConfiguredAdminEmails(notificationId, event, decision, data));
+            deliveryExecutors.sms().execute(
+                    () -> sendConfiguredAdminSms(notificationId, event, decision));
         }
     }
 
@@ -327,16 +332,16 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     /**
-     * Returns the existing row for transaction + decision (duplicate Kafka event),
-     * or inserts it with the DASHBOARD channel and pushes it over WebSocket.
+     * Inserts the row for transaction + decision with the DASHBOARD channel and
+     * pushes it over WebSocket. A duplicate Kafka event hits the unique
+     * (transaction_id, fraud_decision) constraint and gets the existing row back
+     * (no second push).
+     *
+     * Insert first, look up only on conflict: the normal case is now a single
+     * INSERT instead of SELECT + INSERT. Duplicates are rare (Kafka redelivery),
+     * so the extra SELECT is only paid then.
      */
     private Notification findOrCreateNotification(FraudEvent event, String decision, String subject, String message) {
-        Notification existing = notificationRepository
-                .findFirstByTransactionIdAndFraudDecision(event.transactionId(), decision).orElse(null);
-        if (existing != null) {
-            return existing;
-        }
-
         LocalDateTime now = LocalDateTime.now();
         NotificationDetails details = new NotificationDetails();
         details.setDashboard(new DashboardDelivery(SENT));
@@ -363,11 +368,8 @@ public class NotificationServiceImpl implements NotificationService {
                     .findFirstByTransactionIdAndFraudDecision(event.transactionId(), decision)
                     .orElseThrow(() -> ex);
         }
-        log.info("Notification recorded transactionId={}, type={}, status={}",
-                event.transactionId(), DASHBOARD, SENT);
-
         messagingTemplate.convertAndSend("/topic/alerts", toResponse(saved));
-        log.info("Dashboard alert pushed over WebSocket transactionId={}", event.transactionId());
+        log.info("Dashboard alert recorded and pushed over WebSocket transactionId={}", event.transactionId());
         return saved;
     }
 
