@@ -387,6 +387,10 @@ info:
     version: 0.0.1-SNAPSHOT
 
 logging:
+  # File log as well as console, so request latencies ("Completed ... elapsedMs=")
+  # can be analysed after a test run.
+  file:
+    name: logs/api-gateway.log
   level:
     root: INFO
     com.se.frms.gateway: INFO
