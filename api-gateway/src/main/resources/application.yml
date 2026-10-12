@@ -21,6 +21,17 @@ spring:
       httpclient:
         connect-timeout: 3000
         response-timeout: 5s
+        # Connection pool from the gateway to the downstream services. Reuses warm
+        # keep-alive connections and drops them after 15 s idle - before Tomcat
+        # (downstream, ~20 s keep-alive) closes them - so a request never lands on a
+        # connection the service has just closed (which costs a reconnect/retry).
+        pool:
+          type: FIXED
+          max-connections: 500
+          acquire-timeout: 3000
+          max-idle-time: 15s
+          max-life-time: 5m
+          eviction-interval: 10s
       routes:
         - id: auth-service
           uri: lb://auth-service
