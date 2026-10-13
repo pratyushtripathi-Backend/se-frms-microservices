@@ -21,6 +21,17 @@ spring:
       httpclient:
         connect-timeout: 3000
         response-timeout: 5s
+        # Connection pool from the gateway to the downstream services. Reuses warm
+        # keep-alive connections and drops them after 15 s idle - before Tomcat
+        # (downstream, ~20 s keep-alive) closes them - so a request never lands on a
+        # connection the service has just closed (which costs a reconnect/retry).
+        pool:
+          type: FIXED
+          max-connections: 500
+          acquire-timeout: 3000
+          max-idle-time: 15s
+          max-life-time: 5m
+          eviction-interval: 10s
       routes:
         - id: auth-service
           uri: lb://auth-service
@@ -40,8 +51,8 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.replenishRate: 1000
+                redis-rate-limiter.burstCapacity: 2000
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@clientKeyResolver}"
             - name: CircuitBreaker
@@ -68,8 +79,8 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 15
-                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.replenishRate: 1000
+                redis-rate-limiter.burstCapacity: 2000
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@clientKeyResolver}"
             - name: CircuitBreaker
@@ -96,8 +107,8 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 25
-                redis-rate-limiter.burstCapacity: 50
+                redis-rate-limiter.replenishRate: 1000
+                redis-rate-limiter.burstCapacity: 2000
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@clientKeyResolver}"
             - name: CircuitBreaker
@@ -124,8 +135,8 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.replenishRate: 1000
+                redis-rate-limiter.burstCapacity: 2000
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@clientKeyResolver}"
             - name: CircuitBreaker
@@ -152,8 +163,8 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.replenishRate: 1000
+                redis-rate-limiter.burstCapacity: 2000
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@clientKeyResolver}"
             - name: CircuitBreaker
@@ -183,8 +194,8 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.replenishRate: 1000
+                redis-rate-limiter.burstCapacity: 2000
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@clientKeyResolver}"
             - name: CircuitBreaker
@@ -211,8 +222,8 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.replenishRate: 1000
+                redis-rate-limiter.burstCapacity: 2000
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@clientKeyResolver}"
             - name: CircuitBreaker
@@ -387,6 +398,10 @@ info:
     version: 0.0.1-SNAPSHOT
 
 logging:
+  # File log as well as console, so request latencies ("Completed ... elapsedMs=")
+  # can be analysed after a test run.
+  file:
+    name: logs/api-gateway.log
   level:
     root: INFO
     com.se.frms.gateway: INFO
