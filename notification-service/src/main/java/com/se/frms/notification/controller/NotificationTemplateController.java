@@ -14,6 +14,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -83,6 +84,20 @@ public class NotificationTemplateController {
             return forbidden();
         }
         return ResponseEntity.ok(notificationTemplateManagementService.updateTemplateStatus(templateId, request));
+    }
+
+    @DeleteMapping("/{templateId}")
+    public ResponseEntity<?> deleteTemplate(
+            @PathVariable UUID templateId,
+            @RequestHeader(name = INTERNAL_API_KEY_HEADER, required = false) String providedApiKey) {
+        if (!isAuthorized(providedApiKey)) {
+            return forbidden();
+        }
+        notificationTemplateManagementService.deleteTemplate(templateId);
+        return ResponseEntity.ok(Map.of(
+                "message", "Notification template deleted successfully",
+                "templateId", templateId
+        ));
     }
 
     @PostMapping("/refresh-cache")

@@ -14,4 +14,5 @@ public interface NotificationTemplateManagementService {
     NotificationTemplateResponse updateTemplate(UUID templateId, UpdateNotificationTemplateRequest request);
     NotificationTemplateResponse updateTemplateStatus(UUID templateId, UpdateNotificationTemplateStatusRequest request);
     int refreshTemplateCache();
+    void deleteTemplate(UUID templateId);
 }

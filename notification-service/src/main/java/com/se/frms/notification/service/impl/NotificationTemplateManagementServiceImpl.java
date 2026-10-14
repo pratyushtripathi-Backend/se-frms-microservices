@@ -94,6 +94,20 @@ public class NotificationTemplateManagementServiceImpl implements NotificationTe
         return toResponse(saved);
     }
 
+    /**
+     * Permanently removes a template. Its Redis cache entry is evicted after the
+     * delete commits, so the next email for that decision uses the hardcoded
+     * default until a new template is created for the same decision.
+     */
+    @Override
+    @Transactional
+    public void deleteTemplate(UUID templateId) {
+        NotificationTemplate template = findTemplate(templateId);
+        String templateCode = template.getTemplateCode();
+        notificationTemplateRepository.delete(template);
+        evictCacheAfterCommit(templateCode);
+    }
+
     @Override
     public int refreshTemplateCache() {
         notificationTemplateCacheService.refreshEmailTemplates();
@@ -117,6 +131,19 @@ public class NotificationTemplateManagementServiceImpl implements NotificationTe
 
     private String templateCode(String decision) {
         return "FRAUD_" + decision + "_EMAIL";
+    }
+
+    private void evictCacheAfterCommit(String templateCode) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            notificationTemplateCacheService.evictEmailTemplate(templateCode);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notificationTemplateCacheService.evictEmailTemplate(templateCode);
+            }
+        });
     }
 
     private void refreshCacheAfterCommit() {
