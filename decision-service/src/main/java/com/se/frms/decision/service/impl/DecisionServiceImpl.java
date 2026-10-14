@@ -3,6 +3,7 @@ package com.se.frms.decision.service.impl;
 import com.se.frms.decision.cache.DecisionPolicyCache;
 import com.se.frms.decision.client.ScoringLookupClient;
 import com.se.frms.decision.client.TransactionLookupClient;
+import com.se.frms.decision.config.CaseLookupExecutor;
 import com.se.frms.decision.dto.CaseResponse;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionPolicyResponse;
@@ -29,6 +30,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
@@ -52,6 +54,7 @@ public class DecisionServiceImpl implements DecisionService {
     private final ScoringLookupClient scoringLookupClient;
     private final TransactionLookupClient transactionLookupClient;
     private final DecisionReviewedEventProducer decisionReviewedEventProducer;
+    private final CaseLookupExecutor caseLookupExecutor;
 
     @Override
     public DecisionResponse process(DecisionRequest request) {
@@ -157,7 +160,11 @@ public class DecisionServiceImpl implements DecisionService {
         String filterStatus = (status == null || status.isBlank()) ? REVIEW : status.trim().toUpperCase();
         log.info("Fetching case-management list status={}, page={}, size={}",
                 filterStatus, pageable.getPageNumber(), pageable.getPageSize());
-        return decisionRepository.findByFinalDecision(filterStatus, pageable).map(this::mapToCaseResponse);
+        Page<Decision> page = decisionRepository.findByFinalDecision(filterStatus, pageable);
+        // Rows are enriched in parallel (same lookups, same order, same page metadata)
+        // instead of one row after another - see CaseLookupExecutor.
+        List<CaseResponse> rows = caseLookupExecutor.mapInOrder(page.getContent(), this::mapToCaseResponse);
+        return new PageImpl<>(rows, page.getPageable(), page.getTotalElements());
     }
 
     @Override
