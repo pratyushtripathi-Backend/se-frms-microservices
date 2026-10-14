@@ -142,6 +142,23 @@ BEGIN
         END IF;
     END IF;
 
+    -- ---------- indexes (speed only - no data is changed) ----------
+    -- Lets the email / SMS recovery job (every 60 s) read only recently changed rows
+    -- instead of the whole table.
+    CREATE INDEX IF NOT EXISTS idx_se_frms_notification_updated_at
+        ON se_frms_notification (updated_at);
+
+    -- Unread count and "mark all read" read only unread rows instead of the whole
+    -- table. is_read is added by Hibernate after this script on a brand-new
+    -- database, so the index is created from the next start in that case.
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = 'public' AND table_name = 'se_frms_notification'
+                 AND column_name = 'is_read') THEN
+        CREATE INDEX IF NOT EXISTS idx_se_frms_notification_unread
+            ON se_frms_notification (created_date)
+            WHERE is_read = false;
+    END IF;
+
     -- leftovers of the earlier Flyway-based setup - no longer used
     DROP TABLE IF EXISTS flyway_schema_history;
     DROP TABLE IF EXISTS se_frms_notification_backup_20260929;

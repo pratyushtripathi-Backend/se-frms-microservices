@@ -43,6 +43,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import com.se.frms.notification.config.NotificationDeliveryExecutorConfig.NotificationDeliveryExecutors;
@@ -93,6 +94,15 @@ public class NotificationServiceImpl implements NotificationService {
     // An email / SMS still PENDING this long after its row was last touched was
     // interrupted (service stopped while it was queued / in flight) and is re-sent.
     private static final long STALE_PENDING_MINUTES = 10;
+    // recoverFailedDeliveries() only scans rows changed in this window (uses the
+    // updated_at index instead of reading the whole table every minute). Retries
+    // finish within minutes, so 7 days covers every live case; the first run after
+    // startup still scans everything, so nothing older is ever missed.
+    private static final long RECOVERY_WINDOW_DAYS = 7;
+    // LIMIT of the two recovery queries in NotificationRepository.
+    private static final int RECOVERY_BATCH_SIZE = 100;
+    // Re-check an SMS delivery status this much later if the SMS pool is full.
+    private static final long STATUS_CHECK_REQUEUE_MS = 5_000L;
     /** API sort property -> DB column. Anything else falls back to created_date DESC. */
     private static final Map<String, String> SORT_COLUMNS = Map.of(
             "createdDate", "n.created_date",
@@ -118,6 +128,9 @@ public class NotificationServiceImpl implements NotificationService {
                     return size() > RECENT_PUSHES_MAX;
                 }
             });
+
+    // false until recoverFailedDeliveries() has worked through all rows once after startup.
+    private volatile boolean recoveryFullScanDone = false;
 
     private static final String RECIPIENT_ENTRIES =
             "jsonb_each(CASE WHEN jsonb_typeof(c.value -> 'recipients') = 'object' "
@@ -443,12 +456,15 @@ public class NotificationServiceImpl implements NotificationService {
             return; // already handled for this transaction (duplicate event)
         }
 
-        deliveryExecutors.email().execute(
+        submitDelivery(EMAIL, notificationId, recipient,
                 () -> deliverEmail(notificationId, event, recipient, subject, message));
     }
 
     /** Runs on emailDeliveryExecutor. */
     private void deliverEmail(UUID notificationId, FraudEvent event, String recipient, String subject, String message) {
+        if (!claimForSend(notificationId, EMAIL, recipient)) {
+            return; // already sent / being sent by a retry - never send twice
+        }
         long startedAt = System.nanoTime();
         try {
             emailSenderService.send(recipient, subject, message);
@@ -485,13 +501,16 @@ public class NotificationServiceImpl implements NotificationService {
             return; // already handled for this transaction (duplicate event)
         }
 
-        deliveryExecutors.sms().execute(
+        submitDelivery(SMS, notificationId, recipient,
                 () -> deliverSms(notificationId, event, decision, recipient, message, templateId));
     }
 
     /** Runs on smsDeliveryExecutor. */
     private void deliverSms(UUID notificationId, FraudEvent event, String decision, String recipient,
                             String message, String templateId) {
+        if (!claimForSend(notificationId, SMS, recipient)) {
+            return; // already sent / being sent by a retry - never send twice
+        }
         long startedAt = System.nanoTime();
         String messageId;
         try {
@@ -528,8 +547,11 @@ public class NotificationServiceImpl implements NotificationService {
         };
         // The scheduler only waits out the delay; the provider call itself runs on the
         // delivery pool, so slow retries never block other retries / status checks.
+        // If the pool is full the entry simply stays FAILED with retries left, and
+        // recoverFailedDeliveries() (every 60 s) picks it up - same as after a restart.
         notificationRetryTaskScheduler.schedule(
-                () -> deliveryExecutorFor(channel).execute(() -> retryDelivery(notificationId, channel, recipient)),
+                () -> submitDelivery(channel, notificationId, recipient,
+                        () -> retryDelivery(notificationId, channel, recipient)),
                 Instant.now().plusMillis(delayMillis));
     }
 
@@ -594,7 +616,10 @@ public class NotificationServiceImpl implements NotificationService {
     @Scheduled(initialDelay = 60_000L, fixedDelay = 60_000L)
     public void recoverFailedDeliveries() {
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(STALE_PENDING_MINUTES);
-        notificationRepository.findStalePendingDeliveries(cutoff).forEach(row -> {
+        // null = no lower bound: the first run after startup scans every row once.
+        LocalDateTime since = recoveryFullScanDone ? LocalDateTime.now().minusDays(RECOVERY_WINDOW_DAYS) : null;
+        List<Object[]> stalePending = notificationRepository.findStalePendingDeliveries(cutoff, since);
+        stalePending.forEach(row -> {
             UUID notificationId = UUID.fromString(String.valueOf(row[0]));
             String channel = String.valueOf(row[1]);
             String recipient = String.valueOf(row[2]);
@@ -605,13 +630,48 @@ public class NotificationServiceImpl implements NotificationService {
             }
         });
 
-        List<Object[]> failedDeliveries = notificationRepository.findRetryableFailedDeliveries(MAX_RETRY_ATTEMPTS);
-        failedDeliveries.forEach(row -> {
+        List<Object[]> failedDeliveries = notificationRepository.findRetryableFailedDeliveries(MAX_RETRY_ATTEMPTS, since);
+        for (Object[] row : failedDeliveries) {
             UUID notificationId = UUID.fromString(String.valueOf(row[0]));
             String channel = String.valueOf(row[1]);
             String recipient = String.valueOf(row[2]);
-            deliveryExecutorFor(channel).execute(() -> retryDelivery(notificationId, channel, recipient));
-        });
+            if (!submitDelivery(channel, notificationId, recipient,
+                    () -> retryDelivery(notificationId, channel, recipient))) {
+                break; // pool full - the rest stay FAILED and are picked up on the next run
+            }
+        }
+        // Keep scanning all rows (100 per list per run, as before) until the backlog from
+        // before the start is cleared; after that only the recent window is scanned.
+        if (stalePending.size() < RECOVERY_BATCH_SIZE && failedDeliveries.size() < RECOVERY_BATCH_SIZE) {
+            recoveryFullScanDone = true;
+        }
+    }
+
+    /**
+     * Hands an email / SMS send to its delivery pool. Never runs it on the calling
+     * thread (the Kafka consumer): if the pool's queue is full the task is rejected,
+     * the recipient entry stays as it is in the database (PENDING for a first send,
+     * FAILED for a retry) and recoverFailedDeliveries() sends it later. Returns false
+     * when the task was not queued.
+     */
+    private boolean submitDelivery(String channel, UUID notificationId, String recipient, Runnable task) {
+        try {
+            deliveryExecutorFor(channel).execute(task);
+            return true;
+        } catch (TaskRejectedException ex) {
+            log.warn("{} delivery queue full - left for the recovery job notificationId={}, recipient={}",
+                    channel, notificationId, recipient);
+            return false;
+        }
+    }
+
+    /**
+     * Atomically marks a PENDING entry as being sent (internal "claimedAt" field, not
+     * shown anywhere - the status stays PENDING). Only one thread can win, so a send
+     * that waited long in the queue can never go out a second time next to a retry.
+     */
+    private boolean claimForSend(UUID notificationId, String channel, String recipient) {
+        return notificationRepository.claimPendingForSend(notificationId, channel, recipient, LocalDateTime.now()) > 0;
     }
 
     /**
@@ -635,8 +695,19 @@ public class NotificationServiceImpl implements NotificationService {
             default -> 15_000L;
         };
         notificationRetryTaskScheduler.schedule(
-                () -> deliveryExecutors.sms().execute(() -> checkSmsDeliveryStatus(notificationId, recipient, attempt)),
+                () -> submitStatusCheck(notificationId, recipient, attempt),
                 Instant.now().plusMillis(delayMillis));
+    }
+
+    /** SMS pool full: try the same check again a little later instead of skipping it. */
+    private void submitStatusCheck(UUID notificationId, String recipient, int attempt) {
+        try {
+            deliveryExecutors.sms().execute(() -> checkSmsDeliveryStatus(notificationId, recipient, attempt));
+        } catch (TaskRejectedException ex) {
+            notificationRetryTaskScheduler.schedule(
+                    () -> submitStatusCheck(notificationId, recipient, attempt),
+                    Instant.now().plusMillis(STATUS_CHECK_REQUEUE_MS));
+        }
     }
 
     private void checkSmsDeliveryStatus(UUID notificationId, String recipient, int attempt) {
@@ -696,6 +767,9 @@ public class NotificationServiceImpl implements NotificationService {
     /** failureReason null -> JSON null -> removed from the entry (e.g. after a successful retry). */
     private ObjectNode statusPatch(String status, String failureReason) {
         ObjectNode patch = objectMapper.createObjectNode().put("status", status);
+        // Every status change ends a send attempt: drop the internal claim marker
+        // (JSON null -> removed by jsonb_strip_nulls in updateRecipient).
+        patch.putNull("claimedAt");
         if (failureReason == null && !FAILED.equals(status) && !DELIVERY_FAILED.equals(status)) {
             patch.putNull("failureReason");
         } else {

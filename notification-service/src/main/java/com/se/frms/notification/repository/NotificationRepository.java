@@ -99,6 +99,7 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
                   (notification_details #> ARRAY[CAST(:channel AS text), 'recipients', CAST(:recipient AS text)])
                   || jsonb_build_object(
                          'status', 'PENDING',
+                         'claimedAt', CAST(:now AS text),
                          'retryCount', COALESCE(CAST(notification_details #>> ARRAY[CAST(:channel AS text), 'recipients',
                                                      CAST(:recipient AS text), 'retryCount'] AS integer), 0) + 1)),
               updated_at = :now
@@ -112,6 +113,30 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
                                @Param("recipient") String recipient,
                                @Param("maxAttempts") int maxAttempts,
                                @Param("now") LocalDateTime now);
+
+    /**
+     * Claims a PENDING recipient entry for its first send: sets the internal
+     * "claimedAt" marker only if the entry is still PENDING and not yet claimed.
+     * Returns 1 if this caller won (and must send), 0 otherwise (already sent, or a
+     * retry is sending it). The status stays PENDING; any status change made through
+     * updateRecipient() removes the marker again.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE se_frms_notification SET
+              notification_details = jsonb_set(
+                  notification_details,
+                  ARRAY[CAST(:channel AS text), 'recipients', CAST(:recipient AS text), 'claimedAt'],
+                  to_jsonb(CAST(:now AS text)))
+            WHERE id = :id
+              AND notification_details #>> ARRAY[CAST(:channel AS text), 'recipients', CAST(:recipient AS text), 'status'] = 'PENDING'
+              AND notification_details #> ARRAY[CAST(:channel AS text), 'recipients', CAST(:recipient AS text), 'claimedAt'] IS NULL
+            """, nativeQuery = true)
+    int claimPendingForSend(@Param("id") UUID id,
+                            @Param("channel") String channel,
+                            @Param("recipient") String recipient,
+                            @Param("now") LocalDateTime now);
 
     /** Dashboard notifications no admin has read yet (read state is shared by all admins). */
     @Query(value = """
@@ -145,12 +170,14 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
             CROSS JOIN LATERAL jsonb_each(
                 CASE WHEN jsonb_typeof(c.value -> 'recipients') = 'object'
                      THEN c.value -> 'recipients' ELSE CAST('{}' AS jsonb) END) r
-            WHERE r.value ->> 'status' = 'PENDING'
-              AND n.updated_at < :cutoff
+            WHERE n.updated_at < :cutoff
+              AND (CAST(:since AS timestamp) IS NULL OR n.updated_at >= CAST(:since AS timestamp))
+              AND r.value ->> 'status' = 'PENDING'
             ORDER BY n.updated_at ASC
             LIMIT 100
             """, nativeQuery = true)
-    List<Object[]> findStalePendingDeliveries(@Param("cutoff") LocalDateTime cutoff);
+    List<Object[]> findStalePendingDeliveries(@Param("cutoff") LocalDateTime cutoff,
+                                              @Param("since") LocalDateTime since);
 
     /** FAILED recipient entries that still have retries left: rows of [notificationId, channel, recipient]. */
     @Query(value = """
@@ -160,10 +187,12 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
             CROSS JOIN LATERAL jsonb_each(
                 CASE WHEN jsonb_typeof(c.value -> 'recipients') = 'object'
                      THEN c.value -> 'recipients' ELSE CAST('{}' AS jsonb) END) r
-            WHERE r.value ->> 'status' = 'FAILED'
+            WHERE (CAST(:since AS timestamp) IS NULL OR n.updated_at >= CAST(:since AS timestamp))
+              AND r.value ->> 'status' = 'FAILED'
               AND COALESCE(CAST(r.value ->> 'retryCount' AS integer), 0) < :maxAttempts
             ORDER BY n.updated_at ASC
             LIMIT 100
             """, nativeQuery = true)
-    List<Object[]> findRetryableFailedDeliveries(@Param("maxAttempts") int maxAttempts);
+    List<Object[]> findRetryableFailedDeliveries(@Param("maxAttempts") int maxAttempts,
+                                                 @Param("since") LocalDateTime since);
 }
