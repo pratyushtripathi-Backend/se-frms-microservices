@@ -34,7 +34,12 @@ import java.util.concurrent.TimeUnit;
  * short enough that location-blacklist matching for that coordinate comes back by itself
  * instead of staying off until a restart.
  *
- * This cache lives only in memory (like ActiveRuleCache/ActiveBlacklistCache) and is
+ * Lookup order: this in-memory cache, then GeocodeRedisStore (shared by all instances,
+ * kept across restarts, same rounded key, definitive answers only), then Geoapify.
+ * A Redis hit is copied into memory, so each coordinate costs at most one Redis read
+ * per instance. If Redis is unavailable the order is simply memory -> Geoapify, as before.
+ *
+ * The in-memory part (like ActiveRuleCache/ActiveBlacklistCache) is
  * unbounded/never expires for now - a city's location basically never changes, so
  * there is no correctness reason to evict entries; if memory growth ever becomes a
  * concern (very large numbers of distinct coordinates), an eviction policy can be
@@ -48,6 +53,7 @@ public class GeocodeCache {
     private static final int ROUND_SCALE = 3;
 
     private final GeocodingClient geocodingClient;
+    private final GeocodeRedisStore redisStore;
 
     @Value("${geoapify.geocoding.failure-retry-ms:60000}")
     private long failureRetryMs;
@@ -100,7 +106,7 @@ public class GeocodeCache {
                 mine.complete(latest);
                 return latest.result();
             }
-            CachedLookup fresh = lookup(latitude, longitude);
+            CachedLookup fresh = fromRedisOrGeoapify(key, latitude, longitude);
             cache.put(key, fresh);
             mine.complete(fresh);
             return fresh.result();
@@ -110,6 +116,23 @@ public class GeocodeCache {
         } finally {
             inFlight.remove(key, mine);
         }
+    }
+
+    /**
+     * Redis first (a definitive answer stored earlier, by this or another instance);
+     * otherwise one Geoapify call, whose definitive answer is then stored in Redis.
+     * Failures (expiresAtNanos != 0) are never stored in Redis.
+     */
+    private CachedLookup fromRedisOrGeoapify(String key, BigDecimal latitude, BigDecimal longitude) {
+        Optional<Optional<GeocodeResult>> stored = redisStore.get(key);
+        if (stored.isPresent()) {
+            return new CachedLookup(stored.get(), 0);
+        }
+        CachedLookup fresh = lookup(latitude, longitude);
+        if (fresh.expiresAtNanos() == 0) {
+            redisStore.put(key, fresh.result());
+        }
+        return fresh;
     }
 
     /** One Geoapify call, bounded by the client's connect/read timeouts. */

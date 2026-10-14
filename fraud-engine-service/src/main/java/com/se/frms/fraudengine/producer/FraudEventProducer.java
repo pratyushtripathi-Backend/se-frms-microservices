@@ -28,7 +28,29 @@ public class FraudEventProducer {
                 event.totalRiskScore()
         );
         try {
-            kafkaTemplate.send(fraudEventsTopic, event.transactionId().toString(), event);
+            kafkaTemplate.send(fraudEventsTopic, event.transactionId().toString(), event)
+                    // send() only queues the event; Kafka confirms (or fails) it later.
+                    // Without this callback a failed send was silently lost - the
+                    // dashboard alert, analytics and audit for it would never appear.
+                    .whenComplete((result, failure) -> {
+                        if (failure != null) {
+                            log.error(
+                                    "Fraud event publish FAILED transactionId={}, decision={}, topic={}, reason={}",
+                                    event.transactionId(),
+                                    event.fraudDecision(),
+                                    fraudEventsTopic,
+                                    failure.getMessage(),
+                                    failure
+                            );
+                        } else if (log.isDebugEnabled()) {
+                            log.debug(
+                                    "Fraud event published transactionId={}, partition={}, offset={}",
+                                    event.transactionId(),
+                                    result.getRecordMetadata().partition(),
+                                    result.getRecordMetadata().offset()
+                            );
+                        }
+                    });
             log.info(
                     "Fraud event publish triggered transactionId={}, elapsedMs={}",
                     event.transactionId(),
