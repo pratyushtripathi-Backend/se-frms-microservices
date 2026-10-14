@@ -16,6 +16,8 @@ import org.springframework.web.client.RestClientException;
 public class FraudEngineClient {
 
     private final RestClient.Builder restClientBuilder;
+    // Built once and reused (thread-safe) instead of building a new client per call.
+    private volatile RestClient restClient;
 
     @Value("${frms.fraud-engine.base-url}")
     private String fraudEngineBaseUrl;
@@ -26,7 +28,7 @@ public class FraudEngineClient {
     public FraudEvaluationResponse evaluate(FraudEvaluationRequest request) {
         log.info("Calling Fraud Engine for transactionId={}", request.transactionId());
         try {
-            FraudEvaluationResponse response = restClientBuilder.build()
+            FraudEvaluationResponse response = restClient()
                     .post()
                     .uri(fraudEngineBaseUrl + evaluationPath)
                     .body(request)
@@ -43,6 +45,15 @@ public class FraudEngineClient {
             log.error("Fraud Engine call failed for transactionId={}", request.transactionId(), ex);
             throw new FraudEngineException("Unable to evaluate transaction with Fraud Engine", ex);
         }
+    }
+
+    private RestClient restClient() {
+        RestClient client = restClient;
+        if (client == null) {
+            client = restClientBuilder.build();
+            restClient = client;
+        }
+        return client;
     }
 }
 

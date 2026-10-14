@@ -2,18 +2,22 @@ package com.se.frms.transaction.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.data.domain.Persistable;
 
 @Getter
 @Setter
@@ -31,11 +35,36 @@ import org.hibernate.type.SqlTypes;
                 @Index(name = "idx_transaction_created_date", columnList = "created_date")
         }
 )
-public class TransactionMaster {
+public class TransactionMaster implements Persistable<UUID> {
 
+    /**
+     * Assigned in code (UUID.randomUUID()) when the POST is received, so the id can be
+     * returned to the caller and used as the Kafka key before the row is saved
+     * (rows are saved in batches by TransactionIngestConsumer).
+     */
     @Id
-    @GeneratedValue
     private UUID id;
+
+    /**
+     * Because the id is assigned in code, Spring Data cannot use "id == null" to tell
+     * a new row from an existing one; without this flag saveAll() would SELECT each
+     * row before inserting it. true until the row is saved or loaded.
+     */
+    @Transient
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private boolean newRow = true;
+
+    @Override
+    public boolean isNew() {
+        return newRow;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() {
+        this.newRow = false;
+    }
 
     @Column(name = "external_transaction_id", length = 150)
     private String externalTransactionId;

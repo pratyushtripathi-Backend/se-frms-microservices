@@ -20,6 +20,10 @@ import reactor.core.publisher.Mono;
  * - Otherwise a new UUID is generated.
  * - The ID is added to the downstream request headers AND the response
  *   headers, and logged with request method/path/status/latency.
+ *
+ * One INFO line per request ("Completed ... elapsedMs=") - the "Incoming" line is
+ * DEBUG only, so every request does half the logging work on the gateway's few
+ * request-handling threads.
  */
 @Slf4j
 @Component
@@ -44,7 +48,7 @@ public class CorrelationIdFilter implements GlobalFilter, Ordered {
 
         long startedAt = System.currentTimeMillis();
         MDC.put(MDC_KEY, finalRequestId);
-        log.info(
+        log.debug(
                 "Incoming {} {} requestId={}",
                 originalRequest.getMethod(),
                 originalRequest.getURI().getPath(),

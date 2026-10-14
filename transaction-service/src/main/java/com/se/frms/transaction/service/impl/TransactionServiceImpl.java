@@ -1,15 +1,15 @@
 package com.se.frms.transaction.service.impl;
 
 import com.se.frms.transaction.constant.TransactionStatus;
-import com.se.frms.transaction.dto.FraudEvaluationRequest;
 import com.se.frms.transaction.dto.TransactionDetailsResponse;
+import com.se.frms.transaction.dto.TransactionReceivedEvent;
 import com.se.frms.transaction.dto.TransactionRequest;
 import com.se.frms.transaction.dto.TransactionResponse;
 import com.se.frms.transaction.entity.TransactionMaster;
 import com.se.frms.transaction.exception.ResourceNotFoundException;
 import com.se.frms.transaction.repository.TransactionRepository;
-import com.se.frms.transaction.service.DuplicateFraudNotificationService;
-import com.se.frms.transaction.service.TransactionEvaluationService;
+import com.se.frms.transaction.service.DuplicateTransactionGuard;
+import com.se.frms.transaction.service.TransactionPublisher;
 import com.se.frms.transaction.service.TransactionService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,50 +36,73 @@ public class TransactionServiceImpl implements TransactionService {
     private static final String SYSTEM_USER = "TRANSACTION_SERVICE";
 
     private final TransactionRepository transactionRepository;
-    private final DuplicateFraudNotificationService duplicateFraudNotificationService;
-    private final TransactionEvaluationService transactionEvaluationService;
+    private final DuplicateTransactionGuard duplicateTransactionGuard;
+    private final TransactionPublisher transactionPublisher;
 
+    /**
+     * Accepts a transaction: duplicate check in Redis, publish to Kafka
+     * (frms.transactions), reply. No database work and no fraud evaluation on the
+     * request thread any more - TransactionIngestConsumer saves the transaction (batch
+     * INSERT) and then runs the same fraud evaluation as before.
+     *
+     * Same request, same response, same statuses as before (FRAUD_EVALUATION_IN_PROGRESS,
+     * or DUPLICATE_FRAUD for a retried externalTransactionId).
+     */
     @Override
     public TransactionResponse process(TransactionRequest request) {
         long startedAt = System.nanoTime();
-        log.info(
+        log.debug(
                 "Processing transaction externalTransactionId={}, merchantId={}, userId={}",
                 request.externalTransactionId(),
                 request.merchantId(),
                 request.userId()
         );
         TransactionMaster transaction = createTransaction(request);
+        transaction.setId(UUID.randomUUID());
+
         long duplicateCheckStartedAt = System.nanoTime();
-        Optional<TransactionMaster> originalTransaction = findOriginalTransaction(transaction.getExternalTransactionId());
+        Optional<UUID> originalTransactionId =
+                duplicateTransactionGuard.claim(transaction.getExternalTransactionId(), transaction.getId());
         long duplicateCheckMs = elapsedMillis(duplicateCheckStartedAt);
 
-        if (originalTransaction.isPresent()) {
+        if (originalTransactionId.isPresent()) {
             log.warn(
                     "Duplicate transaction detected externalTransactionId={}, originalTransactionId={}",
                     transaction.getExternalTransactionId(),
-                    originalTransaction.get().getId()
+                    originalTransactionId.get()
             );
-            markAsDuplicateFraud(transaction, originalTransaction.get());
+            markAsDuplicateFraud(transaction, originalTransactionId.get());
         } else {
             transaction.setStatus(TransactionStatus.FRAUD_EVALUATION_IN_PROGRESS.name());
             transaction.setUpdatedAt(LocalDateTime.now());
         }
 
-        long saveStartedAt = System.nanoTime();
-        transaction = transactionRepository.save(transaction);
-        long saveMs = elapsedMillis(saveStartedAt);
+        // @Async no longer involved, but the correlation ID still travels with the
+        // transaction (on the Kafka event) to the consumer and on to fraud-engine.
+        String correlationId = MDC.get(CorrelationIdFilter.MDC_KEY);
+
+        long publishStartedAt = System.nanoTime();
+        try {
+            transactionPublisher.publish(TransactionReceivedEvent.from(transaction, correlationId));
+        } catch (RuntimeException ex) {
+            if (originalTransactionId.isEmpty()) {
+                // Not accepted: let a retry of this request be treated as new, not as a duplicate.
+                duplicateTransactionGuard.release(transaction.getExternalTransactionId(), transaction.getId());
+            }
+            log.error("Transaction could not be published externalTransactionId={}",
+                    transaction.getExternalTransactionId(), ex);
+            throw ex;
+        }
+        long publishMs = elapsedMillis(publishStartedAt);
 
         if (Boolean.TRUE.equals(transaction.getDuplicateTransaction())) {
-            duplicateFraudNotificationService.notifyFraudEngine(
-                    new FraudEvaluationRequest(transaction.getId(), transaction.getTransactionData())
-            );
             log.warn(
-                    "Duplicate fraud response returned transactionId={}, externalTransactionId={}, originalTransactionId={}, duplicateCheckMs={}, saveMs={}, elapsedMs={}",
+                    "Duplicate fraud response returned transactionId={}, externalTransactionId={}, originalTransactionId={}, duplicateCheckMs={}, publishMs={}, elapsedMs={}",
                     transaction.getId(),
                     transaction.getExternalTransactionId(),
                     transaction.getOriginalTransactionId(),
                     duplicateCheckMs,
-                    saveMs,
+                    publishMs,
                     elapsedMillis(startedAt)
             );
             return new TransactionResponse(
@@ -91,23 +114,13 @@ public class TransactionServiceImpl implements TransactionService {
             );
         }
 
-        // @Async hands work to a different thread, so MDC (thread-local) would
-        // not otherwise carry over. Capture it here on the request thread and
-        // pass it explicitly so downstream logs/calls still trace to this
-        // transaction's correlation ID.
-        String correlationId = MDC.get(CorrelationIdFilter.MDC_KEY);
-
-        long asyncTriggerStartedAt = System.nanoTime();
-        transactionEvaluationService.evaluate(transaction.getId(), transaction.getTransactionData(), correlationId);
-        long asyncTriggerMs = elapsedMillis(asyncTriggerStartedAt);
         log.info(
-                "Transaction accepted for async fraud evaluation transactionId={}, externalTransactionId={}, correlationId={}, duplicateCheckMs={}, saveMs={}, asyncTriggerMs={}, elapsedMs={}",
+                "Transaction accepted for fraud evaluation transactionId={}, externalTransactionId={}, correlationId={}, duplicateCheckMs={}, publishMs={}, elapsedMs={}",
                 transaction.getId(),
                 transaction.getExternalTransactionId(),
                 correlationId,
                 duplicateCheckMs,
-                saveMs,
-                asyncTriggerMs,
+                publishMs,
                 elapsedMillis(startedAt)
         );
 
@@ -210,23 +223,16 @@ public class TransactionServiceImpl implements TransactionService {
         }
     }
 
-    private void markAsDuplicateFraud(TransactionMaster transaction, TransactionMaster original) {
+    private void markAsDuplicateFraud(TransactionMaster transaction, UUID originalTransactionId) {
         transaction.setStatus(TransactionStatus.DUPLICATE_FRAUD.name());
         transaction.setDuplicateTransaction(true);
-        transaction.setOriginalTransactionId(original.getId());
+        transaction.setOriginalTransactionId(originalTransactionId);
         transaction.setRemarks("Duplicate idempotent transaction detected for externalTransactionId "
                 + transaction.getExternalTransactionId());
         transaction.getTransactionData().put("duplicateTransaction", true);
         transaction.getTransactionData().put("duplicateReason", "IDEMPOTENT_TRANSACTION_RETRY");
-        transaction.getTransactionData().put("originalTransactionId", original.getId().toString());
+        transaction.getTransactionData().put("originalTransactionId", originalTransactionId.toString());
         transaction.getTransactionData().put("fraudSignal", "DUPLICATE_EXTERNAL_TRANSACTION_ID");
-    }
-
-    private Optional<TransactionMaster> findOriginalTransaction(String externalTransactionId) {
-        if (!StringUtils.hasText(externalTransactionId)) {
-            return Optional.empty();
-        }
-        return transactionRepository.findFirstByExternalTransactionIdOrderByCreatedDateAsc(externalTransactionId);
     }
 
     private long elapsedMillis(long startedAt) {

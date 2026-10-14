@@ -23,6 +23,8 @@ public class ScoringLookupClient {
 
     private final RestClient.Builder directRestClientBuilder;
     private final RestClient.Builder loadBalancedRestClientBuilder;
+    // Built once and reused (thread-safe) instead of building a new client per call.
+    private volatile RestClient restClient;
 
     // Explicit constructor (not @RequiredArgsConstructor) so the @Qualifier
     // on each parameter is guaranteed to apply - with three RestClient.Builder
@@ -45,7 +47,7 @@ public class ScoringLookupClient {
 
     public ScoringLookupResponse getByScoringId(UUID scoringId) {
         try {
-            return restClientBuilder().build()
+            return restClient()
                     .get()
                     .uri(scoringBaseUrl + scoringPath + "/{scoringId}", scoringId)
                     .retrieve()
@@ -54,6 +56,15 @@ public class ScoringLookupClient {
             log.warn("Scoring Service lookup failed for scoringId={}", scoringId, ex);
             throw new ExternalServiceException("Unable to fetch scoring details", ex);
         }
+    }
+
+    private RestClient restClient() {
+        RestClient client = restClient;
+        if (client == null) {
+            client = restClientBuilder().build();
+            restClient = client;
+        }
+        return client;
     }
 
     private RestClient.Builder restClientBuilder() {

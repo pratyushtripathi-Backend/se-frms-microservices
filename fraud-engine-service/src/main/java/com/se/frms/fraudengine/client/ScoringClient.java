@@ -16,6 +16,8 @@ public class ScoringClient {
 
     private final RestClient.Builder restClientBuilder;
     private final RestClient.Builder directRestClientBuilder;
+    // Built once and reused (thread-safe) instead of building a new client per call.
+    private volatile RestClient restClient;
 
     @Value("${frms.scoring.base-url}")
     private String scoringBaseUrl;
@@ -32,7 +34,7 @@ public class ScoringClient {
     public ScoringResponse score(ScoringRequest request) {
         log.info("Calling Scoring Service for transactionId={}", request.transactionId());
         try {
-            ScoringResponse response = restClientBuilder().build()
+            ScoringResponse response = restClient()
                     .post()
                     .uri(scoringBaseUrl + scoringPath)
                     .body(request)
@@ -48,6 +50,15 @@ public class ScoringClient {
             log.error("Scoring Service call failed for transactionId={}", request.transactionId(), ex);
             throw new ExternalServiceException("Unable to calculate fraud score", ex);
         }
+    }
+
+    private RestClient restClient() {
+        RestClient client = restClient;
+        if (client == null) {
+            client = restClientBuilder().build();
+            restClient = client;
+        }
+        return client;
     }
 
     private RestClient.Builder restClientBuilder() {

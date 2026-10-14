@@ -29,6 +29,17 @@ public class NotificationRecipientCacheServiceImpl implements NotificationRecipi
     @Value("${notification.recipients.ttl-minutes:10}")
     private long ttlMinutes;
 
+    // Short-lived in-memory copy of the Redis value, so a burst of fraud events
+    // does not do a Redis GET + JSON parse per event. Kept short (default 5 s) so a
+    // refresh done by another instance is still picked up almost immediately.
+    @Value("${notification.recipients.local-cache-ms:5000}")
+    private long localCacheMs;
+
+    private record LocalSnapshot(List<AdminNotificationRecipient> recipients, long loadedAtNanos) {
+    }
+
+    private volatile LocalSnapshot localSnapshot;
+
     @Override
     public void refreshRecipients() {
         try {
@@ -38,6 +49,7 @@ public class NotificationRecipientCacheServiceImpl implements NotificationRecipi
                     objectMapper.writeValueAsString(recipients),
                     Duration.ofMinutes(ttlMinutes)
             );
+            localSnapshot = new LocalSnapshot(List.copyOf(recipients), System.nanoTime());
             log.info("Admin notification recipients refreshed in Redis, count={}", recipients.size());
         } catch (Exception ex) {
             log.warn("Admin notification recipient refresh failed; existing Redis cache will be used", ex);
@@ -46,12 +58,18 @@ public class NotificationRecipientCacheServiceImpl implements NotificationRecipi
 
     @Override
     public List<AdminNotificationRecipient> getCachedRecipients() {
+        LocalSnapshot snapshot = localSnapshot;
+        if (snapshot != null && System.nanoTime() - snapshot.loadedAtNanos() < localCacheMs * 1_000_000L) {
+            return snapshot.recipients();
+        }
         try {
             String cachedValue = stringRedisTemplate.opsForValue().get(redisKey);
-            if (!StringUtils.hasText(cachedValue)) {
-                return List.of();
-            }
-            return objectMapper.readValue(cachedValue, new TypeReference<List<AdminNotificationRecipient>>() { });
+            List<AdminNotificationRecipient> recipients = !StringUtils.hasText(cachedValue)
+                    ? List.of()
+                    : List.copyOf(objectMapper.readValue(cachedValue,
+                            new TypeReference<List<AdminNotificationRecipient>>() { }));
+            localSnapshot = new LocalSnapshot(recipients, System.nanoTime());
+            return recipients;
         } catch (Exception ex) {
             log.warn("Unable to read admin notification recipients from Redis", ex);
             return List.of();

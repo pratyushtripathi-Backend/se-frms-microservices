@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +102,23 @@ public class NotificationServiceImpl implements NotificationService {
             "transactionId", "n.transaction_id"
     );
 
+    /**
+     * Alerts pushed recently by this instance: "transactionId|decision" -> the
+     * notification id that was pushed. Used by findOrCreateNotification() so that:
+     *  - a duplicate Kafka event (redelivery) is not pushed to the dashboard twice;
+     *  - a retried event (INSERT failed, Kafka redelivers) is saved with the SAME
+     *    id that the dashboard already shows.
+     * Bounded (oldest entries dropped), so memory stays small.
+     */
+    private static final int RECENT_PUSHES_MAX = 10_000;
+    private final Map<String, UUID> recentPushes = Collections.synchronizedMap(
+            new LinkedHashMap<>(256, 0.75f, false) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, UUID> eldest) {
+                    return size() > RECENT_PUSHES_MAX;
+                }
+            });
+
     private static final String RECIPIENT_ENTRIES =
             "jsonb_each(CASE WHEN jsonb_typeof(c.value -> 'recipients') = 'object' "
                     + "THEN c.value -> 'recipients' ELSE CAST('{}' AS jsonb) END)";
@@ -147,7 +165,7 @@ public class NotificationServiceImpl implements NotificationService {
 
         Notification notification = findOrCreateNotification(event, decision, dashboardSubject(decision), message);
         // Marks when the dashboard row is actually queryable and pushed.
-        log.info("Dashboard notification ready transactionId={}", event.transactionId());
+        log.debug("Dashboard notification ready transactionId={}", event.transactionId());
 
         // Email / SMS: here only a PENDING entry per recipient is recorded (fast DB
         // update, also the duplicate-event guard); the provider calls themselves run
@@ -332,21 +350,35 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     /**
-     * Returns the existing row for transaction + decision (duplicate Kafka event),
-     * or inserts it with the DASHBOARD channel and pushes it over WebSocket.
+     * Pushes the DASHBOARD alert over WebSocket FIRST, then inserts the row.
+     *
+     * The id is generated here (UUID.randomUUID()) instead of by the database, so
+     * the alert can be pushed with its final id before the INSERT: the dashboard
+     * gets it without waiting for the DB round trip + commit. The row is saved a
+     * few ms later with exactly the same id and content.
+     *
+     * Duplicates:
+     *  - DB: the unique (transaction_id, fraud_decision) constraint still keeps one
+     *    row; a duplicate INSERT fails and the existing row is returned, as before.
+     *  - Dashboard: recentPushes skips a second push for an event this instance has
+     *    already pushed, and the dashboard also ignores an id it has already shown.
+     *
+     * If the INSERT fails for any other reason (e.g. DB down) the exception goes back
+     * to the Kafka consumer, which redelivers the event; the retry reuses the same id
+     * (from recentPushes) and does not push again.
      */
     private Notification findOrCreateNotification(FraudEvent event, String decision, String subject, String message) {
-        Notification existing = notificationRepository
-                .findFirstByTransactionIdAndFraudDecision(event.transactionId(), decision).orElse(null);
-        if (existing != null) {
-            return existing;
-        }
+        String pushKey = event.transactionId() + "|" + decision;
+        UUID newId = UUID.randomUUID();
+        UUID alreadyPushedId = recentPushes.putIfAbsent(pushKey, newId);
+        UUID id = alreadyPushedId != null ? alreadyPushedId : newId;
 
         LocalDateTime now = LocalDateTime.now();
         NotificationDetails details = new NotificationDetails();
         details.setDashboard(new DashboardDelivery(SENT));
 
         Notification notification = new Notification();
+        notification.setId(id);
         notification.setTransactionId(event.transactionId());
         notification.setNotificationDetails(details);
         notification.setSubject(subject);
@@ -359,21 +391,30 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setCreatedDate(now);
         notification.setUpdatedAt(now);
 
-        Notification saved;
+        // 1. Push first (only once per transaction + decision).
+        if (alreadyPushedId == null) {
+            messagingTemplate.convertAndSend("/topic/alerts", toResponse(notification));
+            log.info("Dashboard alert pushed over WebSocket transactionId={}, notificationId={}",
+                    event.transactionId(), id);
+        }
+
+        // 2. Then save the row with the same id.
         try {
-            saved = notificationRepository.saveAndFlush(notification);
+            Notification saved = notificationRepository.saveAndFlush(notification);
+            log.info("Dashboard alert recorded transactionId={}, notificationId={}", event.transactionId(), id);
+            return saved;
         } catch (DataIntegrityViolationException ex) {
-            // Same event processed concurrently - unique (transaction_id, fraud_decision) kept one row.
+            // Duplicate event - unique (transaction_id, fraud_decision) kept one row.
             return notificationRepository
                     .findFirstByTransactionIdAndFraudDecision(event.transactionId(), decision)
                     .orElseThrow(() -> ex);
+        } catch (RuntimeException ex) {
+            // Alert already shown, row not saved yet: Kafka redelivers the event and the
+            // retry saves it with the same id (no second push).
+            log.error("Dashboard alert pushed but not saved yet transactionId={}, notificationId={}; "
+                    + "the event will be retried", event.transactionId(), id, ex);
+            throw ex;
         }
-        log.info("Notification recorded transactionId={}, type={}, status={}",
-                event.transactionId(), DASHBOARD, SENT);
-
-        messagingTemplate.convertAndSend("/topic/alerts", toResponse(saved));
-        log.info("Dashboard alert pushed over WebSocket transactionId={}", event.transactionId());
-        return saved;
     }
 
     private void sendConfiguredAdminEmails(UUID notificationId, FraudEvent event, String decision, Map<String, Object> data) {
