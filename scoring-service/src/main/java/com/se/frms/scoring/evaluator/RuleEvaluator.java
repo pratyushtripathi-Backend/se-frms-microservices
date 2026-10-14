@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,6 +45,29 @@ public class RuleEvaluator {
     private static final Pattern EXTRA_WHITESPACE = Pattern.compile("\\s+");
 
     private final ObjectMapper objectMapper;
+
+    /*
+     * Parsed form of each rule expression, keyed by the exact expression text.
+     * Before, every rule was parsed again for every transaction - and blacklist rules
+     * ("field == 'value'", not JSON) threw a JSON parse exception every time before
+     * the simple-expression fallback ran. The evaluation itself is unchanged: the same
+     * evaluateCondition() runs with the same field / operator / value, and the same
+     * fallbacks apply. An edited rule has different text, so it is parsed fresh; old
+     * entries are dropped once the map reaches MAX_PARSED_EXPRESSIONS.
+     */
+    private static final int MAX_PARSED_EXPRESSIONS = 10_000;
+    private final Map<String, JsonCondition> jsonConditions = new ConcurrentHashMap<>();
+    private final Map<String, SimpleCondition> simpleConditions = new ConcurrentHashMap<>();
+
+    /** JSON expression {"field","operator","value"}; NOT_JSON when the text is not one. */
+    private record JsonCondition(boolean json, String field, String operator, Object value) {
+        static final JsonCondition NOT_JSON = new JsonCondition(false, null, null, null);
+    }
+
+    /** "field op value" expression; NO_MATCH when the text does not have that shape. */
+    private record SimpleCondition(boolean matches, String field, String operator, String value) {
+        static final SimpleCondition NO_MATCH = new SimpleCondition(false, null, null, null);
+    }
 
     private final Map<String, BiPredicate<RuleEvaluationRequest, Map<String, Object>>> ruleHandlers = Map.of(
             "HIGH_AMOUNT", this::matchesHighAmount,
@@ -94,26 +118,62 @@ public class RuleEvaluator {
         if (!StringUtils.hasText(rule.ruleExpression())) {
             return false;
         }
+        JsonCondition condition = cached(jsonConditions, rule.ruleExpression(), this::parseJsonCondition);
+        if (!condition.json()) {
+            return matchesSimpleExpression(rule.ruleExpression(), transactionData);
+        }
         try {
-            Map<String, Object> expression = objectMapper.readValue(rule.ruleExpression(), EXPRESSION_TYPE);
-            return evaluateCondition(
-                    Objects.toString(expression.get("field"), ""),
-                    Objects.toString(expression.get("operator"), ""),
-                    expression.get("value"),
-                    transactionData
-            );
+            return evaluateCondition(condition.field(), condition.operator(), condition.value(), transactionData);
         } catch (Exception ex) {
+            // Same fallback as before when evaluating a JSON expression failed.
             return matchesSimpleExpression(rule.ruleExpression(), transactionData);
         }
     }
 
+    /** Parses once what was parsed on every call before (same field/operator/value). */
+    private JsonCondition parseJsonCondition(String ruleExpression) {
+        try {
+            Map<String, Object> expression = objectMapper.readValue(ruleExpression, EXPRESSION_TYPE);
+            return new JsonCondition(
+                    true,
+                    Objects.toString(expression.get("field"), ""),
+                    Objects.toString(expression.get("operator"), ""),
+                    expression.get("value")
+            );
+        } catch (Exception ex) {
+            // Not a JSON object (e.g. "ip == '1.2.3.4'") - before, this threw on every call.
+            return JsonCondition.NOT_JSON;
+        }
+    }
+
     private boolean matchesSimpleExpression(String ruleExpression, Map<String, Object> transactionData) {
-        Matcher matcher = SIMPLE_EXPRESSION.matcher(ruleExpression);
-        if (!matcher.matches()) {
+        SimpleCondition condition = cached(simpleConditions, ruleExpression, this::parseSimpleCondition);
+        if (!condition.matches()) {
             return false;
         }
 
-        return evaluateCondition(matcher.group(1), matcher.group(2), stripWrappingQuotes(matcher.group(3)), transactionData);
+        return evaluateCondition(condition.field(), condition.operator(), condition.value(), transactionData);
+    }
+
+    private SimpleCondition parseSimpleCondition(String ruleExpression) {
+        Matcher matcher = SIMPLE_EXPRESSION.matcher(ruleExpression);
+        if (!matcher.matches()) {
+            return SimpleCondition.NO_MATCH;
+        }
+        return new SimpleCondition(true, matcher.group(1), matcher.group(2), stripWrappingQuotes(matcher.group(3)));
+    }
+
+    private <T> T cached(Map<String, T> cache, String ruleExpression, java.util.function.Function<String, T> parser) {
+        T parsed = cache.get(ruleExpression);
+        if (parsed != null) {
+            return parsed;
+        }
+        if (cache.size() >= MAX_PARSED_EXPRESSIONS) {
+            cache.clear();
+        }
+        parsed = parser.apply(ruleExpression);
+        cache.put(ruleExpression, parsed);
+        return parsed;
     }
 
     private boolean evaluateCondition(String field, String operator, Object expectedValue, Map<String, Object> transactionData) {
@@ -217,8 +277,16 @@ public class RuleEvaluator {
         if (value instanceof Number number) {
             return BigDecimal.valueOf(number.doubleValue());
         }
+        String text = value.toString();
+        char first = text.charAt(0);
+        // new BigDecimal(text) throws for any text that does not start with a digit,
+        // '+', '-' or '.', so those are "not a number" without throwing an exception
+        // first (text values like cities / IPs / device ids hit this on every rule).
+        if (!Character.isDigit(first) && first != '+' && first != '-' && first != '.') {
+            return null;
+        }
         try {
-            return new BigDecimal(value.toString());
+            return new BigDecimal(text);
         } catch (NumberFormatException ex) {
             return null;
         }
