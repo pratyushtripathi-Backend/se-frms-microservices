@@ -11,7 +11,9 @@ com\se\frms\decision\client\ScoringLookupClient.class
 com\se\frms\decision\repository\DecisionRepository.class
 com\se\frms\decision\dto\DecisionPolicyResponse.class
 com\se\frms\decision\dto\DecisionReviewRequest.class
+com\se\frms\decision\config\CaseLookupExecutor.class
 com\se\frms\decision\cache\DecisionPolicyCache.class
+com\se\frms\decision\config\AsyncConfig.class
 com\se\frms\decision\client\RuleCacheDecisionPolicyClient.class
 com\se\frms\decision\DecisionServiceApplication.class
 com\se\frms\decision\dto\CaseResponse.class
@@ -20,6 +22,8 @@ com\se\frms\decision\dto\DecisionReviewedEvent.class
 com\se\frms\decision\dto\DecisionResponse.class
 com\se\frms\decision\service\DecisionPersistenceService.class
 com\se\frms\decision\service\impl\DecisionServiceImpl.class
+com\se\frms\decision\service\DecisionPersistenceService$DecisionData.class
+com\se\frms\decision\config\HttpClientConfig.class
 com\se\frms\decision\dto\ScoringLookupResponse.class
 com\se\frms\decision\controller\DecisionController.class
 com\se\frms\decision\dto\ScoringLookupResponse$MatchedRuleInfo.class

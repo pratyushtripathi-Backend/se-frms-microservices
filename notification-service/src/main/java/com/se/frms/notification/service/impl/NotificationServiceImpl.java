@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -44,6 +45,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.core.task.TaskRejectedException;
+import org.springframework.kafka.listener.BatchListenerFailedException;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import com.se.frms.notification.config.NotificationDeliveryExecutorConfig.NotificationDeliveryExecutors;
@@ -149,6 +152,8 @@ public class NotificationServiceImpl implements NotificationService {
     // clients - see findOrCreateNotification().
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
+    // One transaction for the whole Kafka batch insert - see handleFraudEvents().
+    private final TransactionTemplate transactionTemplate;
     // Used only for the JSONB-aware list query in search().
     @PersistenceContext
     private EntityManager entityManager;
@@ -167,27 +172,87 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void handleFraudEvent(FraudEvent event) {
-        if (event == null || event.transactionId() == null || !StringUtils.hasText(event.fraudDecision())) {
-            log.warn("Ignoring invalid fraud event");
+        PreparedAlert alert = prepareAndPush(event);
+        if (alert != null) {
+            insertOne(alert);
+        }
+    }
+
+    /**
+     * Batch of fraud events from one Kafka poll (FraudEventConsumer).
+     *
+     * 1. Every alert of the batch is pushed to the dashboard first (unchanged content,
+     *    still before its INSERT) - an alert no longer waits for the rows of the
+     *    events before it in the same partition.
+     * 2. All new rows are inserted in ONE transaction, each row already carrying its
+     *    PENDING email / SMS recipients (before: 1 INSERT + 1 UPDATE per recipient).
+     * 3. The email / SMS sends are handed to the delivery pools.
+     *
+     * If the batch insert fails (e.g. a duplicate event hits the unique constraint),
+     * the rows are inserted one by one exactly like the single-event path, so
+     * duplicates and errors are handled as before. An event that fails with a real
+     * error is reported with its position (BatchListenerFailedException): Kafka
+     * commits the events before it and redelivers from it - the same per-event retry
+     * as the old single-record listener. Redelivered events are not pushed again
+     * (recentPushes) and never get a second email / SMS (claim + existing-row path).
+     */
+    @Override
+    public void handleFraudEvents(List<FraudEvent> events) {
+        List<PreparedAlert> alerts = new ArrayList<>(events.size());
+        List<Integer> positions = new ArrayList<>(events.size()); // index in the Kafka batch
+        for (int index = 0; index < events.size(); index++) {
+            FraudEvent event = events.get(index);
+            int position = index;
+            try {
+                withCorrelationId(event, () -> {
+                    PreparedAlert alert = prepareAndPush(event);
+                    if (alert != null) {
+                        alerts.add(alert);
+                        positions.add(position);
+                    }
+                });
+            } catch (RuntimeException ex) {
+                throw new BatchListenerFailedException("Dashboard push failed", ex, index);
+            }
+        }
+        if (alerts.isEmpty()) {
             return;
         }
+        if (alerts.size() > 1 && insertAllInOneTransaction(alerts)) {
+            for (PreparedAlert alert : alerts) {
+                withCorrelationId(alert.event(), () -> {
+                    log.info("Dashboard alert recorded transactionId={}, notificationId={}",
+                            alert.event().transactionId(), alert.id());
+                    submitPlannedDeliveries(alert);
+                });
+            }
+            return;
+        }
+        for (int i = 0; i < alerts.size(); i++) {
+            PreparedAlert alert = alerts.get(i);
+            try {
+                withCorrelationId(alert.event(), () -> insertOne(alert));
+            } catch (RuntimeException ex) {
+                throw new BatchListenerFailedException("Notification insert failed", ex, positions.get(i));
+            }
+        }
+    }
 
-        String decision = normalizeDecision(event.fraudDecision());
-        Map<String, Object> data = event.transactionData() == null ? Map.of() : event.transactionData();
-        String message = buildDashboardMessage(event, decision, data);
+    private static final String MDC_KEY = "requestId";
 
-        Notification notification = findOrCreateNotification(event, decision, dashboardSubject(decision), message);
-        // Marks when the dashboard row is actually queryable and pushed.
-        log.debug("Dashboard notification ready transactionId={}", event.transactionId());
-
-        // Email / SMS: here only a PENDING entry per recipient is recorded (fast DB
-        // update, also the duplicate-event guard); the provider calls themselves run
-        // on emailDeliveryExecutor / smsDeliveryExecutor. So this method - and the Kafka consumer -
-        // returns right after the dashboard push, and the next alert is never held
-        // up by email / SMS of the previous one.
-        if (BLOCK.equals(decision) || REVIEW.equals(decision) || DUPLICATE.equals(decision)) {
-            sendConfiguredAdminEmails(notification.getId(), event, decision, data);
-            sendConfiguredAdminSms(notification.getId(), event, decision);
+    private void withCorrelationId(FraudEvent event, Runnable work) {
+        String previous = MDC.get(MDC_KEY);
+        if (event != null && event.correlationId() != null) {
+            MDC.put(MDC_KEY, event.correlationId());
+        }
+        try {
+            work.run();
+        } finally {
+            if (previous == null) {
+                MDC.remove(MDC_KEY);
+            } else {
+                MDC.put(MDC_KEY, previous);
+            }
         }
     }
 
@@ -362,33 +427,85 @@ public class NotificationServiceImpl implements NotificationService {
                 : PageRequest.of(page == null ? 0 : page, size, sort);
     }
 
+    /** Everything needed to insert one alert row and send its email / SMS. */
+    private record PreparedAlert(FraudEvent event, String decision, Map<String, Object> data, UUID id,
+                                 String subject, String message, LocalDateTime createdAt,
+                                 EmailPlan email, SmsPlan sms) {
+    }
+
+    /** Email to send for one alert; null when email is disabled or not needed. */
+    private record EmailPlan(String subject, String message, List<String> recipients) {
+    }
+
+    /** SMS to send for one alert; null when SMS is disabled or not needed. */
+    private record SmsPlan(String message, String templateId, List<String> recipients) {
+    }
+
     /**
-     * Pushes the DASHBOARD alert over WebSocket FIRST, then inserts the row.
+     * Validates the event, pushes the DASHBOARD alert over WebSocket FIRST (before the
+     * INSERT), and prepares the row and its email / SMS recipients. Returns null for an
+     * invalid event (ignored, as before).
      *
-     * The id is generated here (UUID.randomUUID()) instead of by the database, so
-     * the alert can be pushed with its final id before the INSERT: the dashboard
-     * gets it without waiting for the DB round trip + commit. The row is saved a
-     * few ms later with exactly the same id and content.
-     *
-     * Duplicates:
-     *  - DB: the unique (transaction_id, fraud_decision) constraint still keeps one
-     *    row; a duplicate INSERT fails and the existing row is returned, as before.
-     *  - Dashboard: recentPushes skips a second push for an event this instance has
-     *    already pushed, and the dashboard also ignores an id it has already shown.
-     *
-     * If the INSERT fails for any other reason (e.g. DB down) the exception goes back
-     * to the Kafka consumer, which redelivers the event; the retry reuses the same id
-     * (from recentPushes) and does not push again.
+     * The id is generated here (UUID.randomUUID()) instead of by the database, so the
+     * alert is pushed with its final id before the INSERT. recentPushes skips a second
+     * push for an event this instance has already pushed, and a redelivered event
+     * reuses the same id. The pushed payload is the dashboard-only row, exactly as
+     * before (email / SMS entries are added to the row afterwards).
      */
-    private Notification findOrCreateNotification(FraudEvent event, String decision, String subject, String message) {
+    private PreparedAlert prepareAndPush(FraudEvent event) {
+        if (event == null || event.transactionId() == null || !StringUtils.hasText(event.fraudDecision())) {
+            log.warn("Ignoring invalid fraud event");
+            return null;
+        }
+        String decision = normalizeDecision(event.fraudDecision());
+        Map<String, Object> data = event.transactionData() == null ? Map.of() : event.transactionData();
+        String message = buildDashboardMessage(event, decision, data);
+        String subject = dashboardSubject(decision);
+
         String pushKey = event.transactionId() + "|" + decision;
         UUID newId = UUID.randomUUID();
         UUID alreadyPushedId = recentPushes.putIfAbsent(pushKey, newId);
         UUID id = alreadyPushedId != null ? alreadyPushedId : newId;
-
         LocalDateTime now = LocalDateTime.now();
+
+        if (alreadyPushedId == null) {
+            Notification dashboardOnly = buildRow(event, decision, id, subject, message, now, null, null);
+            messagingTemplate.convertAndSend("/topic/alerts", toResponse(dashboardOnly));
+            log.info("Dashboard alert pushed over WebSocket transactionId={}, notificationId={}",
+                    event.transactionId(), id);
+        }
+
+        EmailPlan email = null;
+        SmsPlan sms = null;
+        if (BLOCK.equals(decision) || REVIEW.equals(decision) || DUPLICATE.equals(decision)) {
+            email = planEmail(event, decision, data);
+            sms = planSms(event, decision);
+        }
+        return new PreparedAlert(event, decision, data, id, subject, message, now, email, sms);
+    }
+
+    /**
+     * The row as inserted: dashboard entry plus (when given) the EMAIL / SMS channel
+     * with every recipient PENDING / retryCount 0 - the same JSON the per-recipient
+     * addRecipientIfAbsent UPDATEs produced before.
+     */
+    private Notification buildRow(FraudEvent event, String decision, UUID id, String subject, String message,
+                                  LocalDateTime now, EmailPlan email, SmsPlan sms) {
         NotificationDetails details = new NotificationDetails();
         details.setDashboard(new DashboardDelivery(SENT));
+        if (email != null && !email.recipients().isEmpty()) {
+            ChannelDelivery channel = new ChannelDelivery();
+            channel.setSubject(email.subject());
+            channel.setMessage(email.message());
+            email.recipients().forEach(recipient -> channel.getRecipients().put(recipient, pendingEntry()));
+            details.setEmail(channel);
+        }
+        if (sms != null && !sms.recipients().isEmpty()) {
+            ChannelDelivery channel = new ChannelDelivery();
+            channel.setMessage(sms.message());
+            sms.recipients().forEach(recipient -> channel.getRecipients().put(recipient, pendingEntry()));
+            details.setSms(channel);
+        }
 
         Notification notification = new Notification();
         notification.setId(id);
@@ -403,37 +520,102 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setCreatedBy(SYSTEM_USER);
         notification.setCreatedDate(now);
         notification.setUpdatedAt(now);
+        return notification;
+    }
 
-        // 1. Push first (only once per transaction + decision).
-        if (alreadyPushedId == null) {
-            messagingTemplate.convertAndSend("/topic/alerts", toResponse(notification));
-            log.info("Dashboard alert pushed over WebSocket transactionId={}, notificationId={}",
-                    event.transactionId(), id);
-        }
+    private RecipientDelivery pendingEntry() {
+        RecipientDelivery entry = new RecipientDelivery();
+        entry.setStatus(PENDING);
+        entry.setRetryCount(0);
+        return entry;
+    }
 
-        // 2. Then save the row with the same id.
+    private Notification rowFor(PreparedAlert alert) {
+        return buildRow(alert.event(), alert.decision(), alert.id(), alert.subject(), alert.message(),
+                alert.createdAt(), alert.email(), alert.sms());
+    }
+
+    /** Inserts all rows of a batch in one transaction; false if any row failed (nothing saved). */
+    private boolean insertAllInOneTransaction(List<PreparedAlert> alerts) {
         try {
-            Notification saved = notificationRepository.saveAndFlush(notification);
-            log.info("Dashboard alert recorded transactionId={}, notificationId={}", event.transactionId(), id);
-            return saved;
-        } catch (DataIntegrityViolationException ex) {
-            // Duplicate event - unique (transaction_id, fraud_decision) kept one row.
-            return notificationRepository
-                    .findFirstByTransactionIdAndFraudDecision(event.transactionId(), decision)
-                    .orElseThrow(() -> ex);
+            transactionTemplate.executeWithoutResult(status -> {
+                notificationRepository.saveAll(alerts.stream().map(this::rowFor).toList());
+                notificationRepository.flush();
+            });
+            return true;
         } catch (RuntimeException ex) {
-            // Alert already shown, row not saved yet: Kafka redelivers the event and the
-            // retry saves it with the same id (no second push).
-            log.error("Dashboard alert pushed but not saved yet transactionId={}, notificationId={}; "
-                    + "the event will be retried", event.transactionId(), id, ex);
-            throw ex;
+            log.warn("Batch insert of {} notifications failed ({}); inserting them one by one",
+                    alerts.size(), ex.getMessage());
+            return false;
         }
     }
 
-    private void sendConfiguredAdminEmails(UUID notificationId, FraudEvent event, String decision, Map<String, Object> data) {
+    /**
+     * Single-row insert (single event, or batch fallback) - same handling as before:
+     *  - new row: recorded with its PENDING recipients, then the sends are queued;
+     *  - duplicate event (unique transaction_id + fraud_decision): the existing row is
+     *    used and each recipient is added only if missing (addRecipientIfAbsent), so a
+     *    duplicate never sends twice;
+     *  - any other error: logged and re-thrown so Kafka redelivers the event.
+     */
+    private void insertOne(PreparedAlert alert) {
+        FraudEvent event = alert.event();
+        Notification saved;
+        try {
+            saved = notificationRepository.saveAndFlush(rowFor(alert));
+        } catch (DataIntegrityViolationException ex) {
+            Notification existing = notificationRepository
+                    .findFirstByTransactionIdAndFraudDecision(event.transactionId(), alert.decision())
+                    .orElseThrow(() -> ex);
+            sendToMissingRecipients(existing.getId(), alert);
+            return;
+        } catch (RuntimeException ex) {
+            log.error("Dashboard alert pushed but not saved yet transactionId={}, notificationId={}; "
+                    + "the event will be retried", event.transactionId(), alert.id(), ex);
+            throw ex;
+        }
+        log.info("Dashboard alert recorded transactionId={}, notificationId={}", event.transactionId(), saved.getId());
+        submitPlannedDeliveries(alert);
+    }
+
+    /** Recipients are already in the inserted row (PENDING): just queue the sends. */
+    private void submitPlannedDeliveries(PreparedAlert alert) {
+        FraudEvent event = alert.event();
+        UUID notificationId = alert.id();
+        if (alert.email() != null) {
+            EmailPlan email = alert.email();
+            for (String recipient : email.recipients()) {
+                submitDelivery(EMAIL, notificationId, recipient,
+                        () -> deliverEmail(notificationId, event, recipient, email.subject(), email.message()));
+            }
+        }
+        if (alert.sms() != null) {
+            SmsPlan sms = alert.sms();
+            for (String recipient : sms.recipients()) {
+                submitDelivery(SMS, notificationId, recipient,
+                        () -> deliverSms(notificationId, event, alert.decision(), recipient, sms.message(), sms.templateId()));
+            }
+        }
+    }
+
+    /** Duplicate event: add + send only recipients the existing row does not have yet (as before). */
+    private void sendToMissingRecipients(UUID notificationId, PreparedAlert alert) {
+        if (alert.email() != null) {
+            EmailPlan email = alert.email();
+            email.recipients().forEach(recipient ->
+                    sendEmail(notificationId, alert.event(), recipient, email.subject(), email.message()));
+        }
+        if (alert.sms() != null) {
+            SmsPlan sms = alert.sms();
+            sms.recipients().forEach(recipient ->
+                    sendSms(notificationId, alert.event(), alert.decision(), recipient, sms.message(), sms.templateId()));
+        }
+    }
+
+    private EmailPlan planEmail(FraudEvent event, String decision, Map<String, Object> data) {
         if (!emailEnabled) {
             log.info("Email alert is disabled; skipping transactionId={}", event.transactionId());
-            return;
+            return null;
         }
 
         EmailTemplateContent cachedTemplate = notificationTemplateCacheService.getEmailTemplate(decision);
@@ -442,12 +624,29 @@ public class NotificationServiceImpl implements NotificationService {
                 ? buildEmailMessage(event, decision, data)
                 : renderEmailTemplate(cachedTemplate.body(), event, decision, data);
 
-        recipientCacheService.getCachedRecipients().stream()
+        List<String> recipients = recipientCacheService.getCachedRecipients().stream()
                 .map(AdminNotificationRecipient::email)
                 .map(email -> email == null ? "" : email.trim())
                 .filter(StringUtils::hasText)
                 .distinct()
-                .forEach(recipient -> sendEmail(notificationId, event, recipient, subject, message));
+                .toList();
+        return new EmailPlan(subject, message, recipients);
+    }
+
+    private SmsPlan planSms(FraudEvent event, String decision) {
+        if (!smsEnabled) {
+            log.info("SMS alert is disabled; skipping transactionId={}", event.transactionId());
+            return null;
+        }
+        String templateId = REVIEW.equals(decision) ? reviewSmsTemplateId : blockSmsTemplateId;
+        String message = buildSmsMessage(event, decision);
+        List<String> recipients = recipientCacheService.getCachedRecipients().stream()
+                .map(AdminNotificationRecipient::phoneNumber)
+                .map(phone -> phone == null ? "" : phone.trim())
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        return new SmsPlan(message, templateId, recipients);
     }
 
     private void sendEmail(UUID notificationId, FraudEvent event, String recipient, String subject, String message) {
@@ -477,21 +676,6 @@ public class NotificationServiceImpl implements NotificationService {
                     event.transactionId(), recipient, elapsedMillis(startedAt), ex);
             scheduleRetry(notificationId, EMAIL, recipient, 0);
         }
-    }
-
-    private void sendConfiguredAdminSms(UUID notificationId, FraudEvent event, String decision) {
-        if (!smsEnabled) {
-            log.info("SMS alert is disabled; skipping transactionId={}", event.transactionId());
-            return;
-        }
-        String templateId = REVIEW.equals(decision) ? reviewSmsTemplateId : blockSmsTemplateId;
-        String message = buildSmsMessage(event, decision);
-        recipientCacheService.getCachedRecipients().stream()
-                .map(AdminNotificationRecipient::phoneNumber)
-                .map(phone -> phone == null ? "" : phone.trim())
-                .filter(StringUtils::hasText)
-                .distinct()
-                .forEach(recipient -> sendSms(notificationId, event, decision, recipient, message, templateId));
     }
 
     private void sendSms(UUID notificationId, FraudEvent event, String decision, String recipient,

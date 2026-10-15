@@ -11,6 +11,9 @@ public interface NotificationService {
 
     void handleFraudEvent(FraudEvent event);
 
+    /** All events of one Kafka poll - see NotificationServiceImpl.handleFraudEvents(). */
+    void handleFraudEvents(java.util.List<FraudEvent> events);
+
     Page<NotificationResponse> getNotifications(
             UUID transactionId,
             String notificationType,
