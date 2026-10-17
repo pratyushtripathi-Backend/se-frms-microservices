@@ -16,6 +16,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid scoring request");
     }
 
+    /** Compact request for a rules version this instance does not have: Fraud Engine resends in full. */
+    @ExceptionHandler(RulesVersionUnknownException.class)
+    public ResponseEntity<String> handleRulesVersionUnknown(RulesVersionUnknownException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
     @ExceptionHandler(UnsupportedOperationException.class)
     public ResponseEntity<String> handleUnsupported(UnsupportedOperationException ex) {
         return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(ex.getMessage());

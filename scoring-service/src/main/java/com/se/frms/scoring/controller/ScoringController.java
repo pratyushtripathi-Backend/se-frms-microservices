@@ -4,6 +4,8 @@ import com.se.frms.scoring.dto.MatchedRuleHistoryResponse;
 import com.se.frms.scoring.dto.ScoringHistoryResponse;
 import com.se.frms.scoring.dto.ScoringRequest;
 import com.se.frms.scoring.dto.ScoringResponse;
+import com.se.frms.scoring.exception.RulesVersionUnknownException;
+import com.se.frms.scoring.service.RulesVersionCache;
 import com.se.frms.scoring.service.ScoringService;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -30,7 +32,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @Slf4j
 public class ScoringController {
+    static final String RULES_VERSION_HEADER = "X-Frms-Rules-Version";
+
     private final ScoringService scoringService;
+    private final RulesVersionCache rulesVersionCache;
 
     @GetMapping("/health")
     public ResponseEntity<String> health() {
@@ -40,7 +45,15 @@ public class ScoringController {
     @PostMapping
     public ResponseEntity<ScoringResponse> process(@Valid @RequestBody ScoringRequest request) {
         log.debug("POST /api/v1/scoring received transactionId={}", request.transactionId());
-        return ResponseEntity.ok(scoringService.process(request));
+        // A compact request (rules sent earlier, see RulesVersionCache) becomes the same
+        // full request as before; unknown version -> 409, Fraud Engine resends in full.
+        ScoringRequest fullRequest = rulesVersionCache.resolve(request)
+                .orElseThrow(() -> new RulesVersionUnknownException(request.rulesVersion()));
+        ScoringResponse response = scoringService.process(fullRequest);
+        if (rulesVersionCache.has(request.rulesVersion())) {
+            return ResponseEntity.ok().header(RULES_VERSION_HEADER, request.rulesVersion()).body(response);
+        }
+        return ResponseEntity.ok(response);
     }
 
     // GET /api/v1/scoring/{scoringId}

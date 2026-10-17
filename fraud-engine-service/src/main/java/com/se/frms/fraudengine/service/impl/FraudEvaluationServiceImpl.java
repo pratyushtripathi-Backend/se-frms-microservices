@@ -80,7 +80,8 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
         }
 
         long rulesStartedAt = System.nanoTime();
-        List<ActiveRuleResponse> activeRules = activeRuleCache.getActiveRules();
+        ActiveRuleCache.Snapshot ruleSnapshot = activeRuleCache.getSnapshot();
+        List<ActiveRuleResponse> activeRules = ruleSnapshot.rules();
         long activeRulesMs = elapsedMillis(rulesStartedAt);
 
         long locationStartedAt = System.nanoTime();
@@ -108,7 +109,10 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
         ScoringResponse scoringResponse = scoringClient.score(new ScoringRequest(
                 request.transactionId(),
                 combinedRules,
-                scoringTransactionData
+                scoringTransactionData,
+                ruleSnapshot.version(),
+                activeRules.size(),
+                null
         ));
         long scoringMs = elapsedMillis(scoringStartedAt);
 
