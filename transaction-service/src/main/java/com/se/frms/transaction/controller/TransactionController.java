@@ -7,6 +7,7 @@ import com.se.frms.transaction.service.TransactionService;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -35,8 +36,8 @@ public class TransactionController {
     }
 
     @PostMapping
-    public ResponseEntity<TransactionResponse> process(@Valid @RequestBody TransactionRequest request) {
-        log.info(
+    public CompletableFuture<ResponseEntity<TransactionResponse>> process(@Valid @RequestBody TransactionRequest request) {
+        log.debug(
                 "POST /api/v1/transactions received externalTransactionId={}, merchantId={}, userId={}, channel={}, transactionType={}, amount={}, currency={}",
                 request.externalTransactionId(),
                 request.merchantId(),
@@ -46,7 +47,9 @@ public class TransactionController {
                 request.amount(),
                 request.currency()
         );
-        return ResponseEntity.ok(transactionService.process(request));
+        // Same response as before; the Tomcat thread is released while Kafka confirms
+        // the write instead of waiting for it.
+        return transactionService.processAsync(request).thenApply(ResponseEntity::ok);
     }
 
     @GetMapping

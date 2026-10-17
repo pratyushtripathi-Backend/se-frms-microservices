@@ -18,18 +18,21 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import com.se.frms.transaction.filter.CorrelationIdFilter;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class TransactionServiceImpl implements TransactionService {
 
@@ -38,6 +41,19 @@ public class TransactionServiceImpl implements TransactionService {
     private final TransactionRepository transactionRepository;
     private final DuplicateTransactionGuard duplicateTransactionGuard;
     private final TransactionPublisher transactionPublisher;
+    private final Executor responseExecutor;
+
+    public TransactionServiceImpl(
+            TransactionRepository transactionRepository,
+            DuplicateTransactionGuard duplicateTransactionGuard,
+            TransactionPublisher transactionPublisher,
+            @Qualifier("taskExecutor") Executor responseExecutor
+    ) {
+        this.transactionRepository = transactionRepository;
+        this.duplicateTransactionGuard = duplicateTransactionGuard;
+        this.transactionPublisher = transactionPublisher;
+        this.responseExecutor = responseExecutor;
+    }
 
     /**
      * Accepts a transaction: duplicate check in Redis, publish to Kafka
@@ -50,6 +66,24 @@ public class TransactionServiceImpl implements TransactionService {
      */
     @Override
     public TransactionResponse process(TransactionRequest request) {
+        try {
+            return processAsync(request).join();
+        } catch (CompletionException ex) {
+            if (ex.getCause() instanceof RuntimeException cause) {
+                throw cause;
+            }
+            throw ex;
+        }
+    }
+
+    /**
+     * Same as process(), but the HTTP thread does not wait for Kafka's confirmation:
+     * the response is sent when Kafka has stored the transaction (exactly when
+     * process() would have returned), or the future fails with the same 503 error.
+     * Request validation / parsing errors are still thrown immediately, as before.
+     */
+    @Override
+    public CompletableFuture<TransactionResponse> processAsync(TransactionRequest request) {
         long startedAt = System.nanoTime();
         log.debug(
                 "Processing transaction externalTransactionId={}, merchantId={}, userId={}",
@@ -82,19 +116,27 @@ public class TransactionServiceImpl implements TransactionService {
         String correlationId = MDC.get(CorrelationIdFilter.MDC_KEY);
 
         long publishStartedAt = System.nanoTime();
-        try {
-            transactionPublisher.publish(TransactionReceivedEvent.from(transaction, correlationId));
-        } catch (RuntimeException ex) {
-            if (originalTransactionId.isEmpty()) {
-                // Not accepted: let a retry of this request be treated as new, not as a duplicate.
-                duplicateTransactionGuard.release(transaction.getExternalTransactionId(), transaction.getId());
-            }
-            log.error("Transaction could not be published externalTransactionId={}",
-                    transaction.getExternalTransactionId(), ex);
-            throw ex;
-        }
-        long publishMs = elapsedMillis(publishStartedAt);
+        // The rest runs when Kafka has answered, on the response executor (never on the
+        // Kafka producer's own thread, which must not make Redis calls).
+        return transactionPublisher.publishAsync(TransactionReceivedEvent.from(transaction, correlationId))
+                .handleAsync((ignored, error) -> withRequestId(correlationId, () -> {
+                    if (error != null) {
+                        RuntimeException ex = unwrap(error);
+                        if (originalTransactionId.isEmpty()) {
+                            // Not accepted: let a retry of this request be treated as new, not as a duplicate.
+                            duplicateTransactionGuard.release(transaction.getExternalTransactionId(), transaction.getId());
+                        }
+                        log.error("Transaction could not be published externalTransactionId={}",
+                                transaction.getExternalTransactionId(), ex);
+                        throw ex;
+                    }
+                    return accepted(transaction, correlationId, duplicateCheckMs,
+                            elapsedMillis(publishStartedAt), startedAt);
+                }), responseExecutor);
+    }
 
+    private TransactionResponse accepted(TransactionMaster transaction, String correlationId,
+                                         long duplicateCheckMs, long publishMs, long startedAt) {
         if (Boolean.TRUE.equals(transaction.getDuplicateTransaction())) {
             log.warn(
                     "Duplicate fraud response returned transactionId={}, externalTransactionId={}, originalTransactionId={}, duplicateCheckMs={}, publishMs={}, elapsedMs={}",
@@ -131,6 +173,28 @@ public class TransactionServiceImpl implements TransactionService {
                 null,
                 "Transaction accepted. Fraud evaluation is running in background."
         );
+    }
+
+    private static RuntimeException unwrap(Throwable error) {
+        Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
+        return cause instanceof RuntimeException runtime ? runtime : new IllegalStateException(cause);
+    }
+
+    /** Puts the request's correlation id on this (executor) thread's log lines. */
+    private static <T> T withRequestId(String correlationId, Supplier<T> work) {
+        String previous = MDC.get(CorrelationIdFilter.MDC_KEY);
+        if (correlationId != null) {
+            MDC.put(CorrelationIdFilter.MDC_KEY, correlationId);
+        }
+        try {
+            return work.get();
+        } finally {
+            if (previous != null) {
+                MDC.put(CorrelationIdFilter.MDC_KEY, previous);
+            } else {
+                MDC.remove(CorrelationIdFilter.MDC_KEY);
+            }
+        }
     }
 
     @Override

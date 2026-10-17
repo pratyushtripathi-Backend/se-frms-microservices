@@ -3,15 +3,20 @@
   Asynchronous logging. Log lines are handed to a background thread instead of
   being written to the console on the request thread. Format, levels
   (logging.level.*) and logging.pattern.console from application.properties keep
-  working exactly as before. (This service has no logging.file.name, so - as
-  before - it logs to the console only. If you add logging.file.name later, also
-  add the file appender as in fraud-engine-service's logback-spring.xml.)
+  working as before. A rolling file appender retains correlated timings for
+  diagnosis of asynchronous transaction processing.
   queueSize 8192 + discardingThreshold 0: nothing is dropped; a caller only waits
   if 8192 lines are already queued.
 -->
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <include resource="org/springframework/boot/logging/logback/file-appender.xml"/>
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>8192</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <appender-ref ref="FILE"/>
+    </appender>
 
     <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
         <queueSize>8192</queueSize>
@@ -22,5 +27,6 @@
 
     <root level="INFO">
         <appender-ref ref="ASYNC_CONSOLE"/>
+        <appender-ref ref="ASYNC_FILE"/>
     </root>
 </configuration>

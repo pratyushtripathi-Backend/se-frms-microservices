@@ -70,7 +70,7 @@ public class DecisionController {
 
     @PostMapping
     public ResponseEntity<DecisionResponse> process(@Valid @RequestBody DecisionRequest request) {
-        log.info(
+        log.debug(
                 "POST /api/v1/decisions received transactionId={}, scoringId={}, totalRiskScore={}",
                 request.transactionId(),
                 request.scoringId(),

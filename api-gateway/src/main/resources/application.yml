@@ -27,7 +27,8 @@ spring:
         # connection the service has just closed (which costs a reconnect/retry).
         pool:
           type: FIXED
-          max-connections: 500
+          # Capacity for the concurrent acceptance test; rate limits still apply.
+          max-connections: ${GATEWAY_HTTP_MAX_CONNECTIONS:1000}
           acquire-timeout: 3000
           max-idle-time: 15s
           max-life-time: 5m
@@ -49,11 +50,14 @@ spring:
           predicates:
             - Path=/api/v1/transactions/**
           filters:
+            # Same limit as before, kept in gateway memory instead of Redis (no Redis
+            # round-trip per transaction) - see LocalRateLimiter.
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 1000
-                redis-rate-limiter.burstCapacity: 2000
-                redis-rate-limiter.requestedTokens: 1
+                rate-limiter: "#{@localRateLimiter}"
+                local-rate-limiter.replenishRate: 1000
+                local-rate-limiter.burstCapacity: 2000
+                local-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@clientKeyResolver}"
             - name: CircuitBreaker
               args:
@@ -258,12 +262,16 @@ resilience4j:
     instances:
       transactionServiceCircuitBreaker:
         registerHealthIndicator: true
-        slidingWindowType: COUNT_BASED
-        slidingWindowSize: 20
-        minimumNumberOfCalls: 10
+        # Judged on the last 10 seconds (at least 100 calls) instead of the last 20
+        # calls: at hundreds of transactions per second, 10 slow calls out of 20 in a
+        # burst used to open the breaker and turn ~10 s of good traffic into fallbacks.
+        # A real outage still opens it within seconds.
+        slidingWindowType: TIME_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 100
         failureRateThreshold: 50
         waitDurationInOpenState: 10s
-        permittedNumberOfCallsInHalfOpenState: 5
+        permittedNumberOfCallsInHalfOpenState: 20
         automaticTransitionFromOpenToHalfOpenEnabled: true
       authServiceCircuitBreaker:
         registerHealthIndicator: true

@@ -32,7 +32,7 @@ public class DecisionClient {
     }
 
     public DecisionResponse decide(DecisionRequest request) {
-        log.info("Calling Decision Service for transactionId={}, totalRiskScore={}", request.transactionId(), request.totalRiskScore());
+        log.debug("Calling Decision Service for transactionId={}, totalRiskScore={}", request.transactionId(), request.totalRiskScore());
         try {
             DecisionResponse response = restClient()
                     .post()
@@ -40,7 +40,7 @@ public class DecisionClient {
                     .body(request)
                     .retrieve()
                     .body(DecisionResponse.class);
-            log.info(
+            log.debug(
                     "Decision Service response transactionId={}, finalDecision={}",
                     request.transactionId(),
                     response != null ? response.finalDecision() : null

@@ -32,7 +32,7 @@ public class ScoringClient {
     }
 
     public ScoringResponse score(ScoringRequest request) {
-        log.info("Calling Scoring Service for transactionId={}", request.transactionId());
+        log.debug("Calling Scoring Service for transactionId={}", request.transactionId());
         try {
             ScoringResponse response = restClient()
                     .post()
@@ -40,7 +40,7 @@ public class ScoringClient {
                     .body(request)
                     .retrieve()
                     .body(ScoringResponse.class);
-            log.info(
+            log.debug(
                     "Scoring Service response transactionId={}, totalRiskScore={}",
                     request.transactionId(),
                     response != null ? response.totalRiskScore() : null

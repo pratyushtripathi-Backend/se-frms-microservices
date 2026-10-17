@@ -21,7 +21,7 @@ public class FraudEventProducer {
     @Async
     public void publish(FraudEvent event) {
         long startedAt = System.nanoTime();
-        log.info(
+        log.debug(
                 "Publishing fraud event transactionId={}, decision={}, riskScore={}",
                 event.transactionId(),
                 event.fraudDecision(),
@@ -51,7 +51,7 @@ public class FraudEventProducer {
                             );
                         }
                     });
-            log.info(
+            log.debug(
                     "Fraud event publish triggered transactionId={}, elapsedMs={}",
                     event.transactionId(),
                     elapsedMillis(startedAt)

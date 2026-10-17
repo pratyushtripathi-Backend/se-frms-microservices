@@ -80,7 +80,7 @@ public class DecisionPersistenceService {
     private void attempt(int attemptNo, DecisionData data, long startedAt) {
         try {
             UUID savedId = transactionTemplate.execute(status -> upsert(data));
-            log.info(
+            log.debug(
                     "Decision persisted asynchronously transactionId={}, decisionId={}, attempt={}, elapsedMs={}",
                     data.transactionId(),
                     savedId,

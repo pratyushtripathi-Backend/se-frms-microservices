@@ -88,7 +88,7 @@ public class ScoringPersistenceService {
             });
 
             if (Boolean.TRUE.equals(saved)) {
-                log.info(
+                log.debug(
                         "Scoring persisted asynchronously transactionId={}, scoringId={}, matchedRuleCount={}, attempt={}, elapsedMs={}",
                         transactionId,
                         scoringId,

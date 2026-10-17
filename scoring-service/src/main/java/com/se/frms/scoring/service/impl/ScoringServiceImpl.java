@@ -47,7 +47,7 @@ public class ScoringServiceImpl implements ScoringService {
 
         long startedAt = System.nanoTime();
 
-        log.info(
+        log.debug(
                 "Scoring started transactionId={}, activeRuleCount={}",
                 request.transactionId(),
                 request.activeRules().size()

@@ -49,8 +49,19 @@ public class TransactionKafkaConfig {
         return TopicBuilder.name(topic).partitions(partitions).replicas(1).build();
     }
 
+    /** Transactions the database refused to save (see TransactionDeadLetterPublisher). */
     @Bean
-    public ProducerFactory<String, TransactionReceivedEvent> transactionProducerFactory() {
+    public NewTopic transactionsDeadLetterTopic(
+            @Value("${frms.kafka.topic.transactions.dlt:frms.transactions.DLT}") String topic,
+            @Value("${frms.kafka.topic.transactions.partitions:12}") int partitions
+    ) {
+        return TopicBuilder.name(topic).partitions(partitions).replicas(1).build();
+    }
+
+    @Bean
+    public ProducerFactory<String, TransactionReceivedEvent> transactionProducerFactory(
+            @Value("${frms.kafka.producer.linger-ms:5}") int lingerMs
+    ) {
         Map<String, Object> props = new HashMap<>();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
@@ -59,7 +70,10 @@ public class TransactionKafkaConfig {
         // The POST only answers once Kafka has stored the transaction safely.
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
-        props.put(ProducerConfig.LINGER_MS_CONFIG, 0);
+        // Wait up to 5 ms so POSTs arriving together go to Kafka in one write (one
+        // acks=all round-trip for many transactions instead of one each). Only
+        // possible now that the POST no longer blocks on each send.
+        props.put(ProducerConfig.LINGER_MS_CONFIG, lingerMs);
         props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 5000);
         props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
         props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 10000);

@@ -39,7 +39,7 @@ public class ScoringController {
 
     @PostMapping
     public ResponseEntity<ScoringResponse> process(@Valid @RequestBody ScoringRequest request) {
-        log.info("POST /api/v1/scoring received transactionId={}", request.transactionId());
+        log.debug("POST /api/v1/scoring received transactionId={}", request.transactionId());
         return ResponseEntity.ok(scoringService.process(request));
     }
 

@@ -29,6 +29,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
 
     public static final String REQUEST_ID_HEADER = "X-Request-Id";
     public static final String MDC_KEY = "requestId";
+    public static final String INGRESS_MDC_KEY = "ingressEpochMs";
 
     @Override
     protected void doFilterInternal(
@@ -42,10 +43,12 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
         }
         response.setHeader(REQUEST_ID_HEADER, requestId);
         MDC.put(MDC_KEY, requestId);
+        MDC.put(INGRESS_MDC_KEY, Long.toString(System.currentTimeMillis()));
         try {
             filterChain.doFilter(request, response);
         } finally {
             MDC.remove(MDC_KEY);
+            MDC.remove(INGRESS_MDC_KEY);
         }
     }
 }

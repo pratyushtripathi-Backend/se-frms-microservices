@@ -30,15 +30,32 @@ public class TransactionEvaluationService {
     private final FraudEngineClient fraudEngineClient;
 
     public void evaluateNow(UUID transactionId, Map<String, Object> transactionData) {
+        evaluateNow(transactionId, transactionData, null);
+    }
+
+    public void evaluateNow(UUID transactionId, Map<String, Object> transactionData, Long ingressEpochMs) {
+        long startedAt = System.nanoTime();
+        long startedEpochMs = System.currentTimeMillis();
         log.debug("Fraud evaluation started for transactionId={}", transactionId);
         try {
             FraudEvaluationResponse fraudResponse = fraudEngineClient.evaluate(
                     new FraudEvaluationRequest(transactionId, transactionData)
             );
             String status = resolveDecision(fraudResponse);
+            long evaluatedAt = System.nanoTime();
             transactionRepository.updateEvaluationResult(
                     transactionId, status, fraudResponse != null ? fraudResponse.decisionReason() : null,
                     LocalDateTime.now());
+            long finishedAt = System.nanoTime();
+            long completedEpochMs = System.currentTimeMillis();
+            log.debug("transaction_timing transactionId={} status={} ingressEpochMs={} completedEpochMs={} ingressToWorkerMs={} fraudCallMs={} resultUpdateMs={} serverCompletionMs={}",
+                    transactionId, status, ingressEpochMs, completedEpochMs,
+                    ingressEpochMs == null ? null : startedEpochMs - ingressEpochMs,
+                    (evaluatedAt - startedAt) / 1_000_000.0,
+                    (finishedAt - evaluatedAt) / 1_000_000.0,
+                    ingressEpochMs == null ? null : completedEpochMs - ingressEpochMs);
+            // The one INFO line per transaction (detailed timing above is DEBUG; the
+            // "performance" profile turns it on).
             log.info(
                     "Fraud evaluation completed for transactionId={}, status={}, riskScore={}",
                     transactionId,

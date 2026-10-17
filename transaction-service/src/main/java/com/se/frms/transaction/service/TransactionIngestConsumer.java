@@ -16,8 +16,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import java.nio.charset.StandardCharsets;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -42,29 +45,57 @@ public class TransactionIngestConsumer {
     private final TransactionEvaluationService transactionEvaluationService;
     private final DuplicateFraudNotificationService duplicateFraudNotificationService;
     private final ThreadPoolTaskExecutor evaluationExecutor;
+    // Null only in unit tests built with the 4-argument constructor: then a row the
+    // database refuses fails the batch exactly as before.
+    private final TransactionDeadLetterPublisher deadLetterPublisher;
 
     public TransactionIngestConsumer(
             TransactionRepository transactionRepository,
             TransactionEvaluationService transactionEvaluationService,
             DuplicateFraudNotificationService duplicateFraudNotificationService,
-            @Qualifier("evaluationExecutor") ThreadPoolTaskExecutor evaluationExecutor
+            ThreadPoolTaskExecutor evaluationExecutor
+    ) {
+        this(transactionRepository, transactionEvaluationService, duplicateFraudNotificationService,
+                evaluationExecutor, null);
+    }
+
+    @Autowired
+    public TransactionIngestConsumer(
+            TransactionRepository transactionRepository,
+            TransactionEvaluationService transactionEvaluationService,
+            DuplicateFraudNotificationService duplicateFraudNotificationService,
+            @Qualifier("evaluationExecutor") ThreadPoolTaskExecutor evaluationExecutor,
+            TransactionDeadLetterPublisher deadLetterPublisher
     ) {
         this.transactionRepository = transactionRepository;
         this.transactionEvaluationService = transactionEvaluationService;
         this.duplicateFraudNotificationService = duplicateFraudNotificationService;
         this.evaluationExecutor = evaluationExecutor;
+        this.deadLetterPublisher = deadLetterPublisher;
     }
 
     @KafkaListener(
             topics = "${frms.kafka.topic.transactions}",
             containerFactory = "transactionListenerFactory"
     )
-    public void consume(List<TransactionReceivedEvent> events) {
-        List<TransactionReceivedEvent> batch = events.stream().filter(Objects::nonNull).toList();
+    public void consume(List<ConsumerRecord<String, TransactionReceivedEvent>> records) {
+        List<TransactionReceivedEvent> batch = records.stream().map(ConsumerRecord::value).filter(Objects::nonNull).toList();
         if (batch.isEmpty()) {
             return;
         }
         long startedAt = System.nanoTime();
+        Map<UUID, Long> ingressTimes = new HashMap<>();
+        for (ConsumerRecord<String, TransactionReceivedEvent> record : records) {
+            if (record.value() == null) continue;
+            var header = record.headers().lastHeader("frms-ingress-epoch-ms");
+            if (header != null && header.value() != null) {
+                try {
+                    ingressTimes.put(record.value().id(), Long.parseLong(new String(header.value(), StandardCharsets.UTF_8)));
+                } catch (NumberFormatException ignored) {
+                    // Telemetry must never prevent processing old or malformed timing headers.
+                }
+            }
+        }
 
         // Redelivered after a restart: skip rows that are already saved.
         Set<UUID> alreadySaved = new HashSet<>(transactionRepository.findExistingIds(
@@ -72,28 +103,46 @@ public class TransactionIngestConsumer {
 
         List<TransactionMaster> toSave = new ArrayList<>();
         Map<UUID, TransactionReceivedEvent> eventById = new HashMap<>();
+        Map<UUID, ConsumerRecord<String, TransactionReceivedEvent>> recordById = new HashMap<>();
+        for (ConsumerRecord<String, TransactionReceivedEvent> record : records) {
+            if (record.value() != null) {
+                recordById.put(record.value().id(), record);
+            }
+        }
+        LocalDateTime savedAt = LocalDateTime.now();
         for (TransactionReceivedEvent event : batch) {
             eventById.put(event.id(), event);
             if (!alreadySaved.contains(event.id())) {
-                toSave.add(event.toEntity());
+                TransactionMaster entity = event.toEntity();
+                if (TransactionStatus.FRAUD_EVALUATION_IN_PROGRESS.name().equals(entity.getStatus())) {
+                    // Evaluation starts now; StuckTransactionRecoveryJob measures from here,
+                    // so a transaction that waited in a Kafka backlog is never mistaken
+                    // for a stuck one while it is being evaluated.
+                    entity.setUpdatedAt(savedAt);
+                }
+                toSave.add(entity);
             }
         }
         markOldDuplicates(toSave);
         if (!toSave.isEmpty()) {
-            transactionRepository.saveAll(toSave);
+            toSave = save(toSave, recordById);
         }
         long saveMs = (System.nanoTime() - startedAt) / 1_000_000;
 
         List<CompletableFuture<Void>> evaluations = new ArrayList<>(batch.size());
         for (TransactionMaster saved : toSave) {
             TransactionReceivedEvent event = eventById.get(saved.getId());
-            evaluations.add(CompletableFuture.runAsync(() -> evaluate(saved, event), evaluationExecutor));
+            long queuedAt = System.nanoTime();
+            evaluations.add(CompletableFuture.runAsync(() -> {
+                log.debug("evaluation_queue transactionId={} executorWaitMs={}", event.id(), (System.nanoTime() - queuedAt) / 1_000_000.0);
+                evaluate(saved, event, ingressTimes.get(event.id()));
+            }, evaluationExecutor));
         }
         // Redelivered rows that were saved but not evaluated yet (service stopped mid-batch).
         for (UUID id : alreadySaved) {
             TransactionReceivedEvent event = eventById.get(id);
             if (!Boolean.TRUE.equals(event.duplicateTransaction())) {
-                evaluations.add(CompletableFuture.runAsync(() -> evaluateIfStillPending(event), evaluationExecutor));
+                evaluations.add(CompletableFuture.runAsync(() -> evaluateIfStillPending(event, ingressTimes.get(event.id())), evaluationExecutor));
             }
         }
         CompletableFuture.allOf(evaluations.toArray(new CompletableFuture[0])).join();
@@ -102,25 +151,68 @@ public class TransactionIngestConsumer {
                 batch.size(), toSave.size(), saveMs, (System.nanoTime() - startedAt) / 1_000_000);
     }
 
-    private void evaluate(TransactionMaster saved, TransactionReceivedEvent event) {
+    private void evaluate(TransactionMaster saved, TransactionReceivedEvent event, Long ingressEpochMs) {
         withCorrelationId(event.correlationId(), () -> {
             if (Boolean.TRUE.equals(saved.getDuplicateTransaction())) {
                 // Same as before: duplicate is already decided; fraud-engine is only notified.
                 duplicateFraudNotificationService.notifyFraudEngine(
                         new FraudEvaluationRequest(saved.getId(), saved.getTransactionData()));
             } else {
-                transactionEvaluationService.evaluateNow(saved.getId(), saved.getTransactionData());
+                transactionEvaluationService.evaluateNow(saved.getId(), saved.getTransactionData(), ingressEpochMs);
             }
         });
     }
 
-    private void evaluateIfStillPending(TransactionReceivedEvent event) {
+    private void evaluateIfStillPending(TransactionReceivedEvent event, Long ingressEpochMs) {
         withCorrelationId(event.correlationId(), () -> {
-            String status = transactionRepository.findStatusById(event.id()).orElse(null);
-            if (TransactionStatus.FRAUD_EVALUATION_IN_PROGRESS.name().equals(status)) {
-                transactionEvaluationService.evaluateNow(event.id(), event.transactionData());
+            String inProgress = TransactionStatus.FRAUD_EVALUATION_IN_PROGRESS.name();
+            List<Object[]> rows = transactionRepository.findStatusAndUpdatedAt(event.id());
+            if (rows.isEmpty() || !inProgress.equals(rows.get(0)[0])) {
+                return;
+            }
+            // Claim it first, so the recovery job (or another instance) cannot evaluate
+            // the same transaction at the same time.
+            LocalDateTime seenUpdatedAt = (LocalDateTime) rows.get(0)[1];
+            if (seenUpdatedAt == null
+                    || transactionRepository.claimForEvaluation(event.id(), inProgress, seenUpdatedAt, LocalDateTime.now()) == 1) {
+                transactionEvaluationService.evaluateNow(event.id(), event.transactionData(), ingressEpochMs);
             }
         });
+    }
+
+    /**
+     * Saves the batch with one batch INSERT (as before). If the database refuses the
+     * batch because of the DATA of a row (e.g. a value too long for its column), the rows
+     * are saved one by one and only the refused rows are moved to the dead-letter topic
+     * (frms.transactions.DLT) - before, one such row blocked its whole partition forever.
+     * Any other error (database down, ...) is thrown, and the batch is retried every 2 s
+     * until it works, exactly as before.
+     */
+    private List<TransactionMaster> save(List<TransactionMaster> toSave,
+                                         Map<UUID, ConsumerRecord<String, TransactionReceivedEvent>> recordById) {
+        try {
+            transactionRepository.saveAll(toSave);
+            return toSave;
+        } catch (RuntimeException ex) {
+            if (deadLetterPublisher == null || !TransactionDeadLetterPublisher.isBadData(ex)) {
+                throw ex;
+            }
+            log.warn("Batch insert refused by the database, saving one by one size={}, reason={}",
+                    toSave.size(), ex.getMessage());
+        }
+        List<TransactionMaster> saved = new ArrayList<>(toSave.size());
+        for (TransactionMaster transaction : toSave) {
+            try {
+                transactionRepository.save(transaction);
+                saved.add(transaction);
+            } catch (RuntimeException ex) {
+                if (!TransactionDeadLetterPublisher.isBadData(ex)) {
+                    throw ex;
+                }
+                deadLetterPublisher.publish(recordById.get(transaction.getId()), ex);
+            }
+        }
+        return saved;
     }
 
     /**

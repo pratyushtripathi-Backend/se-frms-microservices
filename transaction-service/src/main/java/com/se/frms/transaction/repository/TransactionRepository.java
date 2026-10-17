@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
@@ -46,4 +47,37 @@ public interface TransactionRepository extends JpaRepository<TransactionMaster, 
                                @Param("status") String status,
                                @Param("remarks") String remarks,
                                @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * Status and last-update time of one transaction, used to claim a redelivered
+     * transaction before re-evaluating it (see claimForEvaluation).
+     */
+    @Query("SELECT t.status, t.updatedAt FROM TransactionMaster t WHERE t.id = :id")
+    List<Object[]> findStatusAndUpdatedAt(@Param("id") UUID id);
+
+    /**
+     * Transactions still waiting for their fraud result whose last update is between
+     * :since and :cutoff (oldest first, page size = how many to pick). Rows: id, updatedAt.
+     */
+    @Query("SELECT t.id, t.updatedAt FROM TransactionMaster t WHERE t.status = :status "
+            + "AND t.updatedAt < :cutoff AND t.updatedAt >= :since ORDER BY t.updatedAt")
+    List<Object[]> findStuckTransactions(@Param("status") String status,
+                                         @Param("cutoff") LocalDateTime cutoff,
+                                         @Param("since") LocalDateTime since,
+                                         Pageable page);
+
+    /**
+     * Claims one transaction for (re-)evaluation: succeeds (returns 1) only if it is
+     * still in :status with exactly the updatedAt that was read, and moves updatedAt to
+     * :now. If two places try to claim the same row (recovery job, Kafka redelivery,
+     * another instance), only one of them gets 1, so it is never evaluated twice.
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE TransactionMaster t SET t.updatedAt = :now "
+            + "WHERE t.id = :id AND t.status = :status AND t.updatedAt = :seenUpdatedAt")
+    int claimForEvaluation(@Param("id") UUID id,
+                           @Param("status") String status,
+                           @Param("seenUpdatedAt") LocalDateTime seenUpdatedAt,
+                           @Param("now") LocalDateTime now);
 }

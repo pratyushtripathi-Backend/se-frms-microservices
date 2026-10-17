@@ -1,6 +1,7 @@
 package com.se.frms.gateway.config;
 
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
+import org.springframework.cloud.gateway.support.ConfigurationService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Mono;
@@ -31,5 +32,15 @@ public class RateLimiterConfig {
                     : "unknown";
             return Mono.just(remoteAddress);
         };
+    }
+
+    /**
+     * In-memory rate limiter for the transaction route (see LocalRateLimiter). Not an
+     * autowire candidate, so the RequestRateLimiter filter's default stays the Redis
+     * limiter; the transaction route selects this one by name in application.yml.
+     */
+    @Bean(autowireCandidate = false)
+    public LocalRateLimiter localRateLimiter(ConfigurationService configurationService) {
+        return new LocalRateLimiter(configurationService);
     }
 }

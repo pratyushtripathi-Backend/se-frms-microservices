@@ -65,7 +65,7 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
     @Override
     public FraudEvaluationResponse evaluate(FraudEvaluationRequest request) {
         long startedAt = System.nanoTime();
-        log.info("Fraud evaluation started transactionId={}", request.transactionId());
+        log.debug("Fraud evaluation started transactionId={}", request.transactionId());
 
         if (isDuplicateFraud(request.transactionData())) {
             FraudEvaluationResponse response = new FraudEvaluationResponse(
@@ -97,7 +97,7 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
         combinedRules.addAll(activeRules);
         combinedRules.addAll(blacklistVirtualRules);
         long rulesMs = activeRulesMs + elapsedMillis(blacklistStartedAt);
-        log.info(
+        log.debug(
                 "Using active rule cache transactionId={}, ruleCount={}, blacklistVirtualRuleCount={}",
                 request.transactionId(),
                 activeRules.size(),

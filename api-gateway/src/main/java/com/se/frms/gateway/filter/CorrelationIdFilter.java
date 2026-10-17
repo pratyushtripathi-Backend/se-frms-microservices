@@ -44,7 +44,13 @@ public class CorrelationIdFilter implements GlobalFilter, Ordered {
         ServerHttpRequest mutatedRequest = originalRequest.mutate()
                 .header(REQUEST_ID_HEADER, finalRequestId)
                 .build();
-        exchange.getResponse().getHeaders().add(REQUEST_ID_HEADER, finalRequestId);
+        exchange.getResponse().getHeaders().set(REQUEST_ID_HEADER, finalRequestId);
+        // The downstream service echoes X-Request-Id too, and its response headers are
+        // added to ours - keep exactly one value (the same id) in the response.
+        exchange.getResponse().beforeCommit(() -> {
+            exchange.getResponse().getHeaders().set(REQUEST_ID_HEADER, finalRequestId);
+            return Mono.empty();
+        });
 
         long startedAt = System.currentTimeMillis();
         MDC.put(MDC_KEY, finalRequestId);

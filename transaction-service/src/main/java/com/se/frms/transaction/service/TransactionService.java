@@ -5,12 +5,16 @@ import com.se.frms.transaction.dto.TransactionRequest;
 import com.se.frms.transaction.dto.TransactionResponse;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface TransactionService {
 
     TransactionResponse process(TransactionRequest request);
+
+    /** Same as process(), completing when Kafka has stored the transaction. */
+    CompletableFuture<TransactionResponse> processAsync(TransactionRequest request);
 
     Page<TransactionDetailsResponse> getAll(
             Pageable pageable,

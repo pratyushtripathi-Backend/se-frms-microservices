@@ -28,7 +28,7 @@ public class FraudEvaluationController {
 
     @PostMapping
     public ResponseEntity<FraudEvaluationResponse> evaluate(@Valid @RequestBody FraudEvaluationRequest request) {
-        log.info("POST /api/v1/fraud-evaluations received transactionId={}", request.transactionId());
+        log.debug("POST /api/v1/fraud-evaluations received transactionId={}", request.transactionId());
         return ResponseEntity.ok(fraudEvaluationService.evaluate(request));
     }
 }
