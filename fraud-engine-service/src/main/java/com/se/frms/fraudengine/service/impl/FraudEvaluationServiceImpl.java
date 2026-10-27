@@ -4,7 +4,12 @@ import com.se.frms.fraudengine.cache.ActiveBlacklistCache;
 import com.se.frms.fraudengine.cache.BlacklistIndex;
 import com.se.frms.fraudengine.cache.ActiveRuleCache;
 import com.se.frms.fraudengine.cache.GeocodeCache;
+import com.se.frms.fraudengine.client.BatchOutcome;
 import com.se.frms.fraudengine.client.DecisionClient;
+import com.se.frms.fraudengine.config.FraudBatchExecutor;
+import com.se.frms.fraudengine.dto.FraudEvaluationBatchItem;
+import com.se.frms.fraudengine.exception.ExternalServiceException;
+import java.util.concurrent.CompletableFuture;
 import com.se.frms.fraudengine.client.ScoringClient;
 import com.se.frms.fraudengine.dto.ActiveRuleResponse;
 import com.se.frms.fraudengine.dto.DecisionRequest;
@@ -58,6 +63,7 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
     private final ScoringClient scoringClient;
     private final DecisionClient decisionClient;
     private final FraudEventProducer fraudEventProducer;
+    private final FraudBatchExecutor fraudBatchExecutor;
 
     @Value("${frms.blacklist.virtual-rule.score:100}")
     private Integer blacklistVirtualRuleScore;
@@ -163,6 +169,224 @@ public class FraudEvaluationServiceImpl implements FraudEvaluationService {
                 elapsedMillis(startedAt)
         );
         return response;
+    }
+
+    /**
+     * Evaluates several transactions together. Each transaction goes through exactly the
+     * same steps as evaluate() - duplicate check, active rules, location, blacklist
+     * matching, scoring, decision, fraud event, completion log line - with the same data;
+     * only the calls to Scoring and Decision Service are made once for the whole batch
+     * (POST .../batch) instead of once per transaction. Every transaction gets its own
+     * result: a failure (e.g. Scoring Service error) affects only that transaction, with
+     * the same status and message the single call would have answered.
+     */
+    @Override
+    public List<FraudEvaluationBatchItem> evaluateBatch(List<FraudEvaluationRequest> requests) {
+        int size = requests.size();
+        FraudEvaluationBatchItem[] results = new FraudEvaluationBatchItem[size];
+        PreparedEvaluation[] prepared = new PreparedEvaluation[size];
+        String batchRequestId = MDC.get(CorrelationIdFilter.MDC_KEY);
+
+        // 1. Same preparation as evaluate(), for all transactions in parallel (a location
+        //    lookup of one transaction does not hold up the others). One rule snapshot for
+        //    the whole batch, as a single call reads one snapshot.
+        ActiveRuleCache.Snapshot ruleSnapshot = activeRuleCache.getSnapshot();
+        List<CompletableFuture<Void>> preparation = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            int index = i;
+            FraudEvaluationRequest request = requests.get(i);
+            preparation.add(CompletableFuture.runAsync(() -> withRequestId(request, batchRequestId, () -> {
+                try {
+                    if (isDuplicateFraud(request.transactionData())) {
+                        // Duplicates never call Scoring / Decision: exactly the single path.
+                        results[index] = success(request, evaluate(request));
+                    } else {
+                        prepared[index] = prepare(request, ruleSnapshot);
+                    }
+                } catch (RuntimeException ex) {
+                    results[index] = failure(request, ex);
+                }
+            }), fraudBatchExecutor));
+        }
+        CompletableFuture.allOf(preparation.toArray(new CompletableFuture[0])).join();
+
+        List<Integer> toScore = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            if (prepared[i] != null) {
+                toScore.add(i);
+            }
+        }
+        if (toScore.isEmpty()) {
+            return List.of(results);
+        }
+
+        // 2. One call to Scoring Service for all of them.
+        long scoringStartedAt = System.nanoTime();
+        List<BatchOutcome<ScoringResponse>> scorings = scoringClient.scoreBatch(
+                toScore.stream().map(i -> prepared[i].scoringRequest()).toList(), fraudBatchExecutor);
+        long scoringMs = elapsedMillis(scoringStartedAt);
+
+        // 3. One call to Decision Service for those that were scored.
+        List<Integer> toDecide = new ArrayList<>();
+        List<DecisionRequest> decisionRequests = new ArrayList<>();
+        for (int k = 0; k < toScore.size(); k++) {
+            int i = toScore.get(k);
+            BatchOutcome<ScoringResponse> scoring = scorings.get(k);
+            if (scoring.error() != null) {
+                // Same as evaluate(): scoring failed -> no decision, no event.
+                results[i] = failure(requests.get(i), scoring.error());
+                continue;
+            }
+            prepared[i] = prepared[i].withScoring(scoring.value());
+            ScoringResponse scoringResponse = scoring.value();
+            toDecide.add(i);
+            decisionRequests.add(new DecisionRequest(
+                    requests.get(i).transactionId(),
+                    scoringResponse != null ? scoringResponse.scoringId() : null,
+                    scoringResponse != null ? scoringResponse.totalRiskScore() : 0,
+                    requests.get(i).transactionData()
+            ));
+        }
+        long decisionStartedAt = System.nanoTime();
+        List<BatchOutcome<DecisionResponse>> decisions = decisionClient.decideBatch(decisionRequests, fraudBatchExecutor);
+        long decisionMs = elapsedMillis(decisionStartedAt);
+
+        // 4. Same result, fraud event and log line per transaction as evaluate().
+        for (int k = 0; k < toDecide.size(); k++) {
+            int i = toDecide.get(k);
+            FraudEvaluationRequest request = requests.get(i);
+            BatchOutcome<DecisionResponse> decision = decisions.get(k);
+            PreparedEvaluation p = prepared[i];
+            withRequestId(request, batchRequestId, () -> {
+                if (decision.error() != null) {
+                    results[i] = failure(request, decision.error());
+                    return;
+                }
+                try {
+                    results[i] = success(request, complete(request, p, decision.value(), scoringMs, decisionMs));
+                } catch (RuntimeException ex) {
+                    results[i] = failure(request, ex);
+                }
+            });
+        }
+        return List.of(results);
+    }
+
+    /** Steps of evaluate() before the Scoring call, for one non-duplicate transaction. */
+    private PreparedEvaluation prepare(FraudEvaluationRequest request, ActiveRuleCache.Snapshot ruleSnapshot) {
+        long startedAt = System.nanoTime();
+        List<ActiveRuleResponse> activeRules = ruleSnapshot.rules();
+
+        long locationStartedAt = System.nanoTime();
+        Map<String, Object> scoringTransactionData = buildEnrichedTransactionData(request.transactionData());
+        long locationMs = elapsedMillis(locationStartedAt);
+
+        long blacklistStartedAt = System.nanoTime();
+        List<ActiveRuleResponse> blacklistVirtualRules = buildMatchedBlacklistRules(scoringTransactionData);
+        List<ActiveRuleResponse> combinedRules = new ArrayList<>(activeRules.size() + blacklistVirtualRules.size());
+        combinedRules.addAll(activeRules);
+        combinedRules.addAll(blacklistVirtualRules);
+        long rulesMs = elapsedMillis(blacklistStartedAt);
+        log.debug(
+                "Using active rule cache transactionId={}, ruleCount={}, blacklistVirtualRuleCount={}",
+                request.transactionId(),
+                activeRules.size(),
+                blacklistVirtualRules.size()
+        );
+        ScoringRequest scoringRequest = new ScoringRequest(
+                request.transactionId(),
+                combinedRules,
+                scoringTransactionData,
+                ruleSnapshot.version(),
+                activeRules.size(),
+                null
+        );
+        return new PreparedEvaluation(scoringRequest, null, startedAt, rulesMs, locationMs);
+    }
+
+    /** Steps of evaluate() after the Decision call: response, fraud event, log line. */
+    private FraudEvaluationResponse complete(FraudEvaluationRequest request, PreparedEvaluation p,
+                                             DecisionResponse decisionResponse, long scoringMs, long decisionMs) {
+        ScoringResponse scoringResponse = p.scoringResponse();
+        Integer totalRiskScore = scoringResponse != null ? scoringResponse.totalRiskScore() : 0;
+        String finalDecision = decisionResponse != null && decisionResponse.finalDecision() != null
+                ? decisionResponse.finalDecision()
+                : REVIEW;
+        String decisionReason = decisionResponse != null && decisionResponse.reason() != null
+                ? decisionResponse.reason()
+                : "Decision Service did not return a reason";
+        FraudEvaluationResponse response = new FraudEvaluationResponse(
+                request.transactionId(),
+                finalDecision,
+                totalRiskScore,
+                decisionReason
+        );
+
+        long eventStartedAt = System.nanoTime();
+        publishFraudEvent(
+                request,
+                response,
+                scoringResponse != null ? scoringResponse.scoringId() : null,
+                decisionResponse != null ? decisionResponse.decisionId() : null,
+                scoringResponse != null && scoringResponse.triggeredRules() != null
+                        ? scoringResponse.triggeredRules()
+                        : Map.of()
+        );
+        long eventTriggerMs = elapsedMillis(eventStartedAt);
+        log.info(
+                "Fraud evaluation completed transactionId={}, finalDecision={}, totalRiskScore={}, rulesMs={}, locationMs={}, scoringMs={}, decisionMs={}, eventTriggerMs={}, elapsedMs={}, batch=true",
+                request.transactionId(),
+                finalDecision,
+                totalRiskScore,
+                p.rulesMs(),
+                p.locationMs(),
+                scoringMs,
+                decisionMs,
+                eventTriggerMs,
+                elapsedMillis(p.startedAt())
+        );
+        return response;
+    }
+
+    private record PreparedEvaluation(ScoringRequest scoringRequest, ScoringResponse scoringResponse,
+                                      long startedAt, long rulesMs, long locationMs) {
+        PreparedEvaluation withScoring(ScoringResponse response) {
+            return new PreparedEvaluation(scoringRequest, response, startedAt, rulesMs, locationMs);
+        }
+    }
+
+    private static FraudEvaluationBatchItem success(FraudEvaluationRequest request, FraudEvaluationResponse response) {
+        return new FraudEvaluationBatchItem(request.transactionId(), 200, response, null);
+    }
+
+    /** Same status and message GlobalExceptionHandler gives the single call for this error. */
+    private static FraudEvaluationBatchItem failure(FraudEvaluationRequest request, RuntimeException ex) {
+        if (ex instanceof ExternalServiceException) {
+            return new FraudEvaluationBatchItem(request.transactionId(), 502, null, ex.getMessage());
+        }
+        if (ex instanceof UnsupportedOperationException) {
+            return new FraudEvaluationBatchItem(request.transactionId(), 501, null, ex.getMessage());
+        }
+        log.error("Fraud evaluation failed transactionId={}", request.transactionId(), ex);
+        return new FraudEvaluationBatchItem(request.transactionId(), 500, null, "Internal Server Error");
+    }
+
+    /** Runs work with this transaction's own correlation id in the logs and fraud event. */
+    private static void withRequestId(FraudEvaluationRequest request, String batchRequestId, Runnable work) {
+        String requestId = request.correlationId() != null ? request.correlationId() : batchRequestId;
+        String previous = MDC.get(CorrelationIdFilter.MDC_KEY);
+        if (requestId != null) {
+            MDC.put(CorrelationIdFilter.MDC_KEY, requestId);
+        }
+        try {
+            work.run();
+        } finally {
+            if (previous != null) {
+                MDC.put(CorrelationIdFilter.MDC_KEY, previous);
+            } else {
+                MDC.remove(CorrelationIdFilter.MDC_KEY);
+            }
+        }
     }
 
     /**

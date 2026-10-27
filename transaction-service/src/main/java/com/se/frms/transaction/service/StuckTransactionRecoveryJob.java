@@ -8,12 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
 /**
@@ -34,7 +34,7 @@ public class StuckTransactionRecoveryJob {
 
     private final TransactionRepository transactionRepository;
     private final TransactionEvaluationService transactionEvaluationService;
-    private final ThreadPoolTaskExecutor evaluationExecutor;
+    private final Executor evaluationExecutor;
 
     @Value("${frms.recovery.stuck-after-minutes:5}")
     private long stuckAfterMinutes;
@@ -48,7 +48,7 @@ public class StuckTransactionRecoveryJob {
     public StuckTransactionRecoveryJob(
             TransactionRepository transactionRepository,
             TransactionEvaluationService transactionEvaluationService,
-            @Qualifier("evaluationExecutor") ThreadPoolTaskExecutor evaluationExecutor
+            @Qualifier("evaluationExecutor") Executor evaluationExecutor
     ) {
         this.transactionRepository = transactionRepository;
         this.transactionEvaluationService = transactionEvaluationService;

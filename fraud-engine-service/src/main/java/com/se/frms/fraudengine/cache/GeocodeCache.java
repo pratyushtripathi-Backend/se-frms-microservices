@@ -135,6 +135,32 @@ public class GeocodeCache {
         return fresh;
     }
 
+    /** Outcome of preload(). */
+    public enum PreloadResult { ALREADY_CACHED, RESOLVED, NO_LOCATION, FAILED }
+
+    /**
+     * Warms the cache for one coordinate ahead of time (GeocodePreloadService), using the
+     * same lookup as resolve() - memory, then Redis, then Geoapify - so a later
+     * transaction at this location gets the answer from the cache instead of waiting for
+     * Geoapify. Stores exactly what resolve() would store.
+     */
+    public PreloadResult preload(BigDecimal latitude, BigDecimal longitude) {
+        if (latitude == null || longitude == null) {
+            return PreloadResult.FAILED;
+        }
+        String key = roundedKey(latitude, longitude);
+        CachedLookup existing = cache.get(key);
+        if (existing != null && existing.expiresAtNanos() == 0) {
+            return PreloadResult.ALREADY_CACHED;
+        }
+        resolve(latitude, longitude);
+        CachedLookup stored = cache.get(key);
+        if (stored == null || stored.expiresAtNanos() != 0) {
+            return PreloadResult.FAILED;
+        }
+        return stored.result().isPresent() ? PreloadResult.RESOLVED : PreloadResult.NO_LOCATION;
+    }
+
     /** One Geoapify call, bounded by the client's connect/read timeouts. */
     private CachedLookup lookup(BigDecimal latitude, BigDecimal longitude) {
         GeocodingClient.Lookup lookup = geocodingClient.lookup(latitude, longitude);

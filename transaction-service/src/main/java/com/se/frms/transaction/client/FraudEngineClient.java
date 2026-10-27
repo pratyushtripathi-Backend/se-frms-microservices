@@ -1,9 +1,15 @@
 package com.se.frms.transaction.client;
 
+import com.se.frms.transaction.dto.FraudEvaluationBatchItem;
 import com.se.frms.transaction.dto.FraudEvaluationRequest;
 import com.se.frms.transaction.dto.FraudEvaluationResponse;
 import com.se.frms.transaction.exception.FraudEngineException;
 import java.net.ConnectException;
+import java.util.ArrayList;
+import java.util.List;
+import com.se.frms.transaction.exception.FraudEngineBatchNotSupportedException;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.web.client.HttpClientErrorException;
 import java.net.UnknownHostException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +69,79 @@ public class FraudEngineClient {
                 throw ex;
             }
         }
+    }
+
+    /**
+     * Evaluates several transactions with ONE call to POST /api/v1/fraud-evaluations/batch.
+     * Returns one outcome per request, in the same order: the same response evaluate()
+     * would return, or the same FraudEngineException it would throw for that transaction.
+     *
+     * Retries exactly like evaluate() - only when the call never reached fraud-engine.
+     * If the whole call fails, every transaction fails as a failed single call would.
+     * If fraud-engine has no batch endpoint (older version) it throws
+     * FraudEngineBatchNotSupportedException and the caller evaluates one by one.
+     */
+    public List<Outcome> evaluateBatch(List<FraudEvaluationRequest> requests) {
+        log.debug("Calling Fraud Engine batch size={}", requests.size());
+        for (int attempt = 0; ; attempt++) {
+            try {
+                List<FraudEvaluationBatchItem> items = restClient()
+                        .post()
+                        .uri(fraudEngineBaseUrl + evaluationPath + "/batch")
+                        .body(requests)
+                        .retrieve()
+                        .body(new ParameterizedTypeReference<List<FraudEvaluationBatchItem>>() { });
+                if (items == null || items.size() != requests.size()) {
+                    throw new RestClientException("Fraud Engine batch answered " + (items == null ? 0 : items.size())
+                            + " results for " + requests.size() + " transactions");
+                }
+                List<Outcome> outcomes = new ArrayList<>(items.size());
+                for (int i = 0; i < items.size(); i++) {
+                    FraudEvaluationBatchItem item = items.get(i);
+                    if (item.status() == 200) {
+                        outcomes.add(new Outcome(item.response(), null));
+                    } else {
+                        RestClientException cause = new RestClientException(
+                                "Fraud Engine answered " + item.status() + ": " + item.error());
+                        log.error("Fraud Engine call failed for transactionId={}", requests.get(i).transactionId(), cause);
+                        outcomes.add(new Outcome(null,
+                                new FraudEngineException("Unable to evaluate transaction with Fraud Engine", cause)));
+                    }
+                }
+                return outcomes;
+            } catch (HttpClientErrorException ex) {
+                if (ex.getStatusCode().value() == 404 || ex.getStatusCode().value() == 405) {
+                    throw new FraudEngineBatchNotSupportedException(ex);
+                }
+                return failAll(requests, ex);
+            } catch (RuntimeException ex) {
+                if (attempt < RETRY_DELAYS_MS.length && neverReachedFraudEngine(ex)) {
+                    log.warn("Fraud Engine not reachable for batch size={}, retry {} of {} in {} ms, reason={}",
+                            requests.size(), attempt + 1, RETRY_DELAYS_MS.length, RETRY_DELAYS_MS[attempt], ex.toString());
+                    if (sleep(RETRY_DELAYS_MS[attempt])) {
+                        continue;
+                    }
+                }
+                if (ex instanceof RestClientException restClientException) {
+                    return failAll(requests, restClientException);
+                }
+                throw ex;
+            }
+        }
+    }
+
+    /** Result for one transaction of evaluateBatch(): response, or the error evaluate() would throw. */
+    public record Outcome(FraudEvaluationResponse response, FraudEngineException error) {
+    }
+
+    private List<Outcome> failAll(List<FraudEvaluationRequest> requests, RestClientException ex) {
+        log.error("Fraud Engine batch call failed size={}", requests.size(), ex);
+        FraudEngineException error = new FraudEngineException("Unable to evaluate transaction with Fraud Engine", ex);
+        List<Outcome> outcomes = new ArrayList<>(requests.size());
+        for (int i = 0; i < requests.size(); i++) {
+            outcomes.add(new Outcome(null, error));
+        }
+        return outcomes;
     }
 
     private FraudEvaluationResponse call(FraudEvaluationRequest request) {

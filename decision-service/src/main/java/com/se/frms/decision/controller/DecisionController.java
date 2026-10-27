@@ -1,12 +1,17 @@
 package com.se.frms.decision.controller;
 
 import com.se.frms.decision.dto.CaseResponse;
+import com.se.frms.decision.dto.DecisionBatchItem;
+import com.se.frms.decision.exception.ExternalServiceException;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionResponse;
 import com.se.frms.decision.dto.DecisionReviewRequest;
 import com.se.frms.decision.service.DecisionService;
 import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import java.util.ArrayList;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,13 +29,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/decisions")
 @RequiredArgsConstructor
 @Slf4j
 public class DecisionController {
+
+    static final int MAX_BATCH_SIZE = 500;
     private final DecisionService decisionService;
+    private final Validator validator;
 
     @GetMapping("/health")
     public ResponseEntity<String> health() {
@@ -66,6 +75,42 @@ public class DecisionController {
     public ResponseEntity<DecisionResponse> getByTransactionId(@PathVariable UUID transactionId) {
         log.info("GET /api/v1/decisions/transaction/{} received", transactionId);
         return ResponseEntity.ok(decisionService.getByTransactionId(transactionId));
+    }
+
+    /**
+     * Decides several transactions in one call (Fraud Engine sends up to ~50 at a time
+     * instead of one HTTP call each). Every transaction goes through exactly the same
+     * validation and decisionService.process() as POST /api/v1/decisions and gets its own
+     * result in the same position; one failing transaction never affects the others.
+     */
+    @PostMapping("/batch")
+    public ResponseEntity<List<DecisionBatchItem>> processBatch(@RequestBody List<DecisionRequest> requests) {
+        if (requests == null || requests.isEmpty() || requests.size() > MAX_BATCH_SIZE) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<DecisionBatchItem> results = new ArrayList<>(requests.size());
+        for (DecisionRequest request : requests) {
+            UUID transactionId = request != null ? request.transactionId() : null;
+            // Same answers as the single endpoint and its GlobalExceptionHandler.
+            if (request == null || !validator.validate(request).isEmpty()) {
+                results.add(new DecisionBatchItem(transactionId, 400, null, "Invalid decision request"));
+                continue;
+            }
+            try {
+                results.add(new DecisionBatchItem(transactionId, 200, decisionService.process(request), null));
+            } catch (ResponseStatusException ex) {
+                // e.g. 503 "No active decision policy" - same status and text as the single call.
+                results.add(new DecisionBatchItem(transactionId, ex.getStatusCode().value(), null, ex.getReason()));
+            } catch (ExternalServiceException ex) {
+                results.add(new DecisionBatchItem(transactionId, 502, null, ex.getMessage()));
+            } catch (UnsupportedOperationException ex) {
+                results.add(new DecisionBatchItem(transactionId, 501, null, ex.getMessage()));
+            } catch (RuntimeException ex) {
+                log.error("Decision failed in batch transactionId={}", transactionId, ex);
+                results.add(new DecisionBatchItem(transactionId, 500, null, "Unable to process decision request"));
+            }
+        }
+        return ResponseEntity.ok(results);
     }
 
     @PostMapping

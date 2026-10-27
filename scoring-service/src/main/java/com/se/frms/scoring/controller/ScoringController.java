@@ -1,6 +1,7 @@
 package com.se.frms.scoring.controller;
 
 import com.se.frms.scoring.dto.MatchedRuleHistoryResponse;
+import com.se.frms.scoring.dto.ScoringBatchItem;
 import com.se.frms.scoring.dto.ScoringHistoryResponse;
 import com.se.frms.scoring.dto.ScoringRequest;
 import com.se.frms.scoring.dto.ScoringResponse;
@@ -8,6 +9,9 @@ import com.se.frms.scoring.exception.RulesVersionUnknownException;
 import com.se.frms.scoring.service.RulesVersionCache;
 import com.se.frms.scoring.service.ScoringService;
 import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import java.util.ArrayList;
+import java.util.Optional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -36,6 +40,9 @@ public class ScoringController {
 
     private final ScoringService scoringService;
     private final RulesVersionCache rulesVersionCache;
+    private final Validator validator;
+
+    static final int MAX_BATCH_SIZE = 500;
 
     @GetMapping("/health")
     public ResponseEntity<String> health() {
@@ -54,6 +61,51 @@ public class ScoringController {
             return ResponseEntity.ok().header(RULES_VERSION_HEADER, request.rulesVersion()).body(response);
         }
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Scores several transactions in one call (Fraud Engine sends up to ~50 at a time
+     * instead of one HTTP call each). Every transaction goes through exactly the same
+     * steps as POST /api/v1/scoring - validation, rules-version lookup, scoringService
+     * .process() - and gets its own result in the same position; one failing transaction
+     * never affects the others.
+     */
+    @PostMapping("/batch")
+    public ResponseEntity<List<ScoringBatchItem>> processBatch(@RequestBody List<ScoringRequest> requests) {
+        if (requests == null || requests.isEmpty() || requests.size() > MAX_BATCH_SIZE) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<ScoringBatchItem> results = new ArrayList<>(requests.size());
+        String storedVersion = null;
+        for (ScoringRequest request : requests) {
+            results.add(processOne(request));
+            if (request != null && rulesVersionCache.has(request.rulesVersion())) {
+                storedVersion = request.rulesVersion();
+            }
+        }
+        if (storedVersion != null) {
+            return ResponseEntity.ok().header(RULES_VERSION_HEADER, storedVersion).body(results);
+        }
+        return ResponseEntity.ok(results);
+    }
+
+    private ScoringBatchItem processOne(ScoringRequest request) {
+        UUID transactionId = request != null ? request.transactionId() : null;
+        // Same answers as the single endpoint and its GlobalExceptionHandler.
+        if (request == null || !validator.validate(request).isEmpty()) {
+            return new ScoringBatchItem(transactionId, 400, null, "Invalid scoring request");
+        }
+        Optional<ScoringRequest> fullRequest = rulesVersionCache.resolve(request);
+        if (fullRequest.isEmpty()) {
+            return new ScoringBatchItem(transactionId, 409, null,
+                    new RulesVersionUnknownException(request.rulesVersion()).getMessage());
+        }
+        try {
+            return new ScoringBatchItem(transactionId, 200, scoringService.process(fullRequest.get()), null);
+        } catch (RuntimeException ex) {
+            log.error("Scoring failed in batch transactionId={}", transactionId, ex);
+            return new ScoringBatchItem(transactionId, 500, null, "Unable to process scoring request");
+        }
     }
 
     // GET /api/v1/scoring/{scoringId}
