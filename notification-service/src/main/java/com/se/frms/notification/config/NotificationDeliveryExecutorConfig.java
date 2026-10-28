@@ -36,13 +36,18 @@ public class NotificationDeliveryExecutorConfig {
     @Value("${notification.delivery.threads:12}")
     private int deliveryThreads;
 
+    // Optional separate size for the email pool only. 0 (default) = use notification.delivery.threads,
+    // so nothing changes unless this is set. SMS pool is never affected by it.
+    @Value("${notification.delivery.email-threads:0}")
+    private int emailThreads;
+
     // Sends waiting per channel. ~2 KB each, so 10,000 is ~20 MB at most.
     @Value("${notification.delivery.queue-capacity:10000}")
     private int deliveryQueueCapacity;
 
     @Bean
     public ThreadPoolTaskExecutor emailDeliveryExecutor() {
-        return deliveryExecutor("email-delivery-", deliveryThreads, deliveryQueueCapacity);
+        return deliveryExecutor("email-delivery-", emailThreads > 0 ? emailThreads : deliveryThreads, deliveryQueueCapacity);
     }
 
     @Bean

@@ -13,6 +13,7 @@ import com.se.frms.notification.entity.Notification.ChannelDelivery;
 import com.se.frms.notification.entity.Notification.DashboardDelivery;
 import com.se.frms.notification.entity.Notification.NotificationDetails;
 import com.se.frms.notification.entity.Notification.RecipientDelivery;
+import com.se.frms.notification.exception.EmailProviderBlockedException;
 import com.se.frms.notification.repository.NotificationRepository;
 import com.se.frms.notification.service.EmailSenderService;
 import com.se.frms.notification.service.NotificationRecipientCacheService;
@@ -90,6 +91,11 @@ public class NotificationServiceImpl implements NotificationService {
     private static final String DELIVERED = "DELIVERED";
     private static final String DELIVERY_FAILED = "DELIVERY_FAILED";
     private static final int MAX_RETRY_ATTEMPTS = 3;
+    // failureReason prefix of an EMAIL that waits for the provider (login blocked, quota, paced by
+    // EmailSendGate). Such an entry is FAILED with retryCount unchanged, so no retry is used up;
+    // recoverWaitingEmails() sends it when the gate allows. The SQL in NotificationRepository
+    // matches this exact prefix.
+    private static final String WAITING_PREFIX = "[WAITING] ";
     // Separate, small cap for delivery-status polling attempts (not persisted -
     // passed through the scheduled lambda) so it never interacts with
     // retryCount / MAX_RETRY_ATTEMPTS, which govern re-sending a failed SMS.
@@ -140,6 +146,8 @@ public class NotificationServiceImpl implements NotificationService {
                     + "THEN c.value -> 'recipients' ELSE CAST('{}' AS jsonb) END)";
     private final NotificationRepository notificationRepository;
     private final EmailSenderService emailSenderService;
+    // EMAIL only: pauses sending while the email provider blocks us - see EmailSendGate.
+    private final EmailSendGate emailSendGate;
     private final NotificationRecipientCacheService recipientCacheService;
     private final NotificationTemplateCacheService notificationTemplateCacheService;
     private final SmsSenderService smsSenderService;
@@ -630,6 +638,10 @@ public class NotificationServiceImpl implements NotificationService {
                 .filter(StringUtils::hasText)
                 .distinct()
                 .toList();
+        if (recipients.isEmpty()) {
+            log.warn("No email recipients available (recipient cache empty or unreadable); "
+                    + "no email will be sent for transactionId={}", event.transactionId());
+        }
         return new EmailPlan(subject, message, recipients);
     }
 
@@ -661,15 +673,39 @@ public class NotificationServiceImpl implements NotificationService {
 
     /** Runs on emailDeliveryExecutor. */
     private void deliverEmail(UUID notificationId, FraudEvent event, String recipient, String subject, String message) {
+        EmailSendGate.Decision decision = emailSendGate.tryAcquire();
+        if (!decision.allowed()) {
+            // The provider is blocking us (or sending is paced): keep the email instead of trying and
+            // failing. It is not a failed attempt - recoverWaitingEmails() sends it later.
+            updateRecipient(notificationId, EMAIL, recipient,
+                    statusPatch(FAILED, WAITING_PREFIX + EmailSendGate.waitingReason(decision)), PENDING);
+            return;
+        }
+        try {
+            deliverEmailNow(notificationId, event, recipient, subject, message);
+        } finally {
+            emailSendGate.release(decision);
+        }
+    }
+
+    private void deliverEmailNow(UUID notificationId, FraudEvent event, String recipient, String subject, String message) {
         if (!claimForSend(notificationId, EMAIL, recipient)) {
             return; // already sent / being sent by a retry - never send twice
         }
         long startedAt = System.nanoTime();
         try {
             emailSenderService.send(recipient, subject, message);
+            emailSendGate.onSuccess();
             updateRecipient(notificationId, EMAIL, recipient, statusPatch(SENT, null), null);
             log.info("Email alert sent transactionId={}, recipient={}, sendMs={}",
                     event.transactionId(), recipient, elapsedMillis(startedAt));
+        } catch (EmailProviderBlockedException ex) {
+            // The provider is the problem, not this email: no quick retries (each would be another
+            // login attempt) and no retry used up - the email waits and is sent later.
+            emailSendGate.onProviderBlocked(ex.getKind());
+            updateRecipient(notificationId, EMAIL, recipient, statusPatch(FAILED, WAITING_PREFIX + ex.getMessage()), null);
+            log.warn("Email alert waiting for the email provider transactionId={}, recipient={}, sendMs={}, reason={}",
+                    event.transactionId(), recipient, elapsedMillis(startedAt), ex.getMessage());
         } catch (Exception ex) {
             updateRecipient(notificationId, EMAIL, recipient, statusPatch(FAILED, ex.getMessage()), null);
             log.error("Email alert failed transactionId={}, recipient={}, sendMs={}",
@@ -740,6 +776,24 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     private void retryDelivery(UUID notificationId, String channel, String recipient) {
+        if (!EMAIL.equals(channel)) {
+            doRetryDelivery(notificationId, channel, recipient); // SMS: exactly as before
+            return;
+        }
+        EmailSendGate.Decision decision = emailSendGate.tryAcquire();
+        if (!decision.allowed()) {
+            // Provider blocked / paced: leave the entry untouched (no retry used up); the recovery
+            // job tries it again later.
+            return;
+        }
+        try {
+            doRetryDelivery(notificationId, channel, recipient);
+        } finally {
+            emailSendGate.release(decision);
+        }
+    }
+
+    private void doRetryDelivery(UUID notificationId, String channel, String recipient) {
         // Atomic FAILED -> PENDING + retryCount++; if another thread already
         // claimed it (or retries are exhausted) this returns 0 and we stop.
         if (notificationRepository.claimRecipientForRetry(
@@ -762,6 +816,7 @@ public class NotificationServiceImpl implements NotificationService {
         try {
             if (EMAIL.equals(channel)) {
                 emailSenderService.send(recipient, channelDelivery.getSubject(), channelDelivery.getMessage());
+                emailSendGate.onSuccess();
             } else if (SMS.equals(channel)) {
                 String templateId = REVIEW.equals(notification.getFraudDecision())
                         ? reviewSmsTemplateId : blockSmsTemplateId;
@@ -770,6 +825,16 @@ public class NotificationServiceImpl implements NotificationService {
             } else {
                 return;
             }
+        } catch (EmailProviderBlockedException ex) {
+            // The provider is the problem, not this email: give back the retry the claim just used
+            // (retryCount was incremented by claimRecipientForRetry) and wait.
+            emailSendGate.onProviderBlocked(ex.getKind());
+            ObjectNode waitingPatch = statusPatch(FAILED, WAITING_PREFIX + ex.getMessage());
+            waitingPatch.put("retryCount", Math.max(retryCount - 1, 0));
+            updateRecipient(notificationId, channel, recipient, waitingPatch, null);
+            log.warn("Email retry waiting for the email provider notificationId={}, recipient={}, reason={}",
+                    notificationId, recipient, ex.getMessage());
+            return;
         } catch (Exception ex) {
             updateRecipient(notificationId, channel, recipient, statusPatch(FAILED, ex.getMessage()), null);
             log.warn("Notification retry failed notificationId={}, channel={}, recipient={}, retryCount={}",
@@ -824,10 +889,38 @@ public class NotificationServiceImpl implements NotificationService {
                 break; // pool full - the rest stay FAILED and are picked up on the next run
             }
         }
+        try {
+            recoverWaitingEmails(since);
+        } catch (RuntimeException ex) {
+            log.warn("Recovery of waiting emails failed; will try again on the next run", ex);
+        }
         // Keep scanning all rows (100 per list per run, as before) until the backlog from
         // before the start is cleared; after that only the recent window is scanned.
         if (stalePending.size() < RECOVERY_BATCH_SIZE && failedDeliveries.size() < RECOVERY_BATCH_SIZE) {
             recoveryFullScanDone = true;
+        }
+    }
+
+    /**
+     * Emails that wait for the email provider (FAILED with a "[WAITING]" reason: login blocked,
+     * daily quota, paced): sent again when EmailSendGate allows. They are deliberately NOT part of
+     * findRetryableFailedDeliveries(), so waiting emails can never crowd out SMS or ordinary retries.
+     * Each send goes through retryDelivery(), which asks the gate again.
+     */
+    private void recoverWaitingEmails(LocalDateTime since) {
+        if (emailSendGate.isPaused()) {
+            return;
+        }
+        for (Object[] row : notificationRepository.findWaitingEmailDeliveries(MAX_RETRY_ATTEMPTS, since)) {
+            if (emailSendGate.isPaused()) {
+                break;
+            }
+            UUID notificationId = UUID.fromString(String.valueOf(row[0]));
+            String recipient = String.valueOf(row[2]);
+            if (!submitDelivery(EMAIL, notificationId, recipient,
+                    () -> retryDelivery(notificationId, EMAIL, recipient))) {
+                break; // pool full - the rest keep waiting and are picked up on the next run
+            }
         }
     }
 

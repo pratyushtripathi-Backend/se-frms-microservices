@@ -17,7 +17,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.MailAuthenticationException;
+import com.se.frms.notification.exception.EmailProviderBlockedException;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -85,7 +85,10 @@ public class SmtpEmailSenderService implements EmailSenderService {
                     sendOn(sender, pooled, mimeMessage);
                 } catch (MessagingException firstFailure) {
                     closeQuietly(pooled);
-                    if (!reused || firstFailure instanceof SendFailedException) {
+                    // A provider block / quota error is not a dropped connection: sending
+                    // again on a new connection would only be one more login attempt.
+                    if (!reused || firstFailure instanceof SendFailedException
+                            || EmailProviderBlockedException.classify(firstFailure) != null) {
                         throw firstFailure;
                     }
                     log.info("Reused SMTP connection failed ({}); sending again on a new connection",
@@ -94,9 +97,15 @@ public class SmtpEmailSenderService implements EmailSenderService {
                 }
             } catch (AuthenticationFailedException ex) {
                 closeQuietly(pooled);
-                throw new MailAuthenticationException(ex);
+                // Login refused (e.g. "454 Too many login attempts"): the provider is blocking us,
+                // not this email - see EmailProviderBlockedException.
+                throw new EmailProviderBlockedException(EmailProviderBlockedException.Kind.LOGIN, ex);
             } catch (MessagingException ex) {
                 closeQuietly(pooled);
+                EmailProviderBlockedException.Kind blockKind = EmailProviderBlockedException.classify(ex);
+                if (blockKind != null) {
+                    throw new EmailProviderBlockedException(blockKind, ex);
+                }
                 Map<Object, Exception> failed = new LinkedHashMap<>();
                 failed.put(email, ex);
                 throw new MailSendException(failed);

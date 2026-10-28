@@ -190,9 +190,34 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
             WHERE (CAST(:since AS timestamp) IS NULL OR n.updated_at >= CAST(:since AS timestamp))
               AND r.value ->> 'status' = 'FAILED'
               AND COALESCE(CAST(r.value ->> 'retryCount' AS integer), 0) < :maxAttempts
+              AND COALESCE(r.value ->> 'failureReason', '') NOT LIKE '[WAITING]%'
             ORDER BY n.updated_at ASC
             LIMIT 100
             """, nativeQuery = true)
     List<Object[]> findRetryableFailedDeliveries(@Param("maxAttempts") int maxAttempts,
                                                  @Param("since") LocalDateTime since);
+
+    /**
+     * EMAIL entries that wait for the email provider (login blocked / quota / paced): FAILED with a
+     * failureReason starting with "[WAITING]" - see NotificationServiceImpl.WAITING_PREFIX. Kept apart
+     * from findRetryableFailedDeliveries() so they cannot crowd out SMS or ordinary retries.
+     * Rows of [notificationId, channel, recipient].
+     */
+    @Query(value = """
+            SELECT CAST(n.id AS varchar) AS notification_id, c.key AS channel, r.key AS recipient
+            FROM se_frms_notification n
+            CROSS JOIN LATERAL jsonb_each(COALESCE(n.notification_details, CAST('{}' AS jsonb))) c
+            CROSS JOIN LATERAL jsonb_each(
+                CASE WHEN jsonb_typeof(c.value -> 'recipients') = 'object'
+                     THEN c.value -> 'recipients' ELSE CAST('{}' AS jsonb) END) r
+            WHERE c.key = 'EMAIL'
+              AND (CAST(:since AS timestamp) IS NULL OR n.updated_at >= CAST(:since AS timestamp))
+              AND r.value ->> 'status' = 'FAILED'
+              AND COALESCE(r.value ->> 'failureReason', '') LIKE '[WAITING]%'
+              AND COALESCE(CAST(r.value ->> 'retryCount' AS integer), 0) < :maxAttempts
+            ORDER BY n.updated_at ASC
+            LIMIT 100
+            """, nativeQuery = true)
+    List<Object[]> findWaitingEmailDeliveries(@Param("maxAttempts") int maxAttempts,
+                                              @Param("since") LocalDateTime since);
 }
