@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -151,45 +152,20 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Transactional(readOnly = true)
     public AnalyticsSummaryResponse getSummary(LocalDate fromDate, LocalDate toDate) {
         DateRange range = resolveDateRange(fromDate, toDate);
-        List<FraudAnalytics> rows = fraudAnalyticsRepository.findAll(createdAtBetween(range));
-        long total = rows.size();
-        long allowCount = rows.stream().filter(row -> ALLOW.equals(row.getFraudDecision())).count();
-        long reviewCount = rows.stream().filter(row -> REVIEW.equals(row.getFraudDecision())).count();
-        long blockCount = rows.stream().filter(row -> BLOCK.equals(row.getFraudDecision())).count();
-        double averageRiskScore = rows.stream()
-                .map(FraudAnalytics::getTotalRiskScore)
-                .filter(score -> score != null)
-                .mapToInt(Integer::intValue)
-                .average()
-                .orElse(0);
-
-        // "Fraud Alert" = anything not cleanly ALLOW-ed, i.e. REVIEW + BLOCK.
-        long fraudAlertCount = reviewCount + blockCount;
-
-        long highRiskCount = rows.stream()
-                .map(FraudAnalytics::getTotalRiskScore)
-                .filter(score -> score != null && score >= HIGH_RISK_THRESHOLD)
-                .count();
-
-        // Rows saved before the amount column existed have a null amount -
-        // treated as 0 here rather than skipped, so a handful of old rows
-        // can't silently make this look smaller than it should be.
-        BigDecimal blockedAmount = rows.stream()
-                .filter(row -> BLOCK.equals(row.getFraudDecision()))
-                .map(row -> row.getAmount() != null ? row.getAmount() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
+        FraudAnalyticsRepository.SummaryProjection summary =
+                fraudAnalyticsRepository.summarize(range.from(), range.to(), HIGH_RISK_THRESHOLD);
         return new AnalyticsSummaryResponse(
-                total,
-                allowCount,
-                reviewCount,
-                blockCount,
-                averageRiskScore,
-                fraudAlertCount,
-                highRiskCount,
-                blockedAmount
+                summary.getTotal(),
+                summary.getAllowCount(),
+                summary.getReviewCount(),
+                summary.getBlockCount(),
+                summary.getAverageRiskScore(),
+                summary.getReviewCount() + summary.getBlockCount(),
+                summary.getHighRiskCount(),
+                summary.getBlockedAmount()
         );
     }
+
 
     @Override
     @Transactional(readOnly = true)
@@ -216,16 +192,20 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     public List<RulePerformanceResponse> getRulePerformance(int limit) {
         int effectiveLimit = Math.max(limit, 1);
         Map<String, RuleStats> statsByRule = new HashMap<>();
-        fraudAnalyticsRepository.findAll().forEach(row -> {
-            if (row.getTriggeredRules() == null) {
-                return;
-            }
-            row.getTriggeredRules().forEach((ruleCode, score) -> {
-                RuleStats stats = statsByRule.computeIfAbsent(ruleCode, ignored -> new RuleStats());
-                stats.triggerCount++;
-                stats.totalScore += toLong(score);
+        // Keep the existing score conversion and ranking while fetching only the rule JSON in batches.
+        try (Stream<Map<String, Object>> rows = fraudAnalyticsRepository.streamTriggeredRules()) {
+            rows.forEach(rules -> {
+                if (rules == null) {
+                    return;
+                }
+                rules.forEach((ruleCode, score) -> {
+                    RuleStats stats = statsByRule.computeIfAbsent(ruleCode, ignored -> new RuleStats());
+                    stats.triggerCount++;
+                    stats.totalScore += toLong(score);
+                });
             });
-        });
+        }
+
 
         return statsByRule.entrySet()
                 .stream()
@@ -368,11 +348,6 @@ public class AnalyticsServiceImpl implements AnalyticsService {
             query.orderBy(criteriaBuilder.desc(root.get("createdAt")));
             return predicate;
         };
-    }
-
-    private Specification<FraudAnalytics> createdAtBetween(DateRange range) {
-        return (root, query, criteriaBuilder) ->
-                criteriaBuilder.between(root.get("createdAt"), range.from(), range.to());
     }
 
     private DateRange resolveDateRange(LocalDate fromDate, LocalDate toDate) {

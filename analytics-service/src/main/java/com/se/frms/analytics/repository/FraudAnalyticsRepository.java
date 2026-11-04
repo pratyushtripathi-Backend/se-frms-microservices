@@ -1,21 +1,58 @@
 package com.se.frms.analytics.repository;
 
 import com.se.frms.analytics.entity.FraudAnalytics;
+import jakarta.persistence.QueryHint;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
+import org.hibernate.jpa.HibernateHints;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 public interface FraudAnalyticsRepository extends JpaRepository<FraudAnalytics, UUID>, JpaSpecificationExecutor<FraudAnalytics> {
     Optional<FraudAnalytics> findByTransactionId(UUID transactionId);
 
     long countByFraudDecisionAndCreatedAtBetween(String fraudDecision, LocalDateTime fromDate, LocalDateTime toDate);
+
+    @Query(value = """
+            SELECT COUNT(*) AS "total",
+                   COUNT(*) FILTER (WHERE fraud_decision = 'ALLOW') AS "allowCount",
+                   COUNT(*) FILTER (WHERE fraud_decision = 'REVIEW') AS "reviewCount",
+                   COUNT(*) FILTER (WHERE fraud_decision = 'BLOCK') AS "blockCount",
+                   COALESCE(CAST(AVG(total_risk_score) AS double precision), 0) AS "averageRiskScore",
+                   COUNT(*) FILTER (WHERE total_risk_score >= :highRiskThreshold) AS "highRiskCount",
+                   COALESCE(SUM(amount) FILTER (WHERE fraud_decision = 'BLOCK'), 0) AS "blockedAmount"
+            FROM se_frms_fraud_analytics
+            WHERE created_at BETWEEN :fromDate AND :toDate
+            """, nativeQuery = true)
+    SummaryProjection summarize(
+            @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate,
+            @Param("highRiskThreshold") int highRiskThreshold
+    );
+
+    @Query("SELECT f.triggeredRules FROM FraudAnalytics f")
+    @QueryHints(@QueryHint(name = HibernateHints.HINT_FETCH_SIZE, value = "256"))
+    Stream<Map<String, Object>> streamTriggeredRules();
+
+    interface SummaryProjection {
+        long getTotal();
+        long getAllowCount();
+        long getReviewCount();
+        long getBlockCount();
+        double getAverageRiskScore();
+        long getHighRiskCount();
+        BigDecimal getBlockedAmount();
+    }
 
     Page<FraudAnalytics> findByFraudDecisionAndCreatedAtBetween(
             String fraudDecision,
