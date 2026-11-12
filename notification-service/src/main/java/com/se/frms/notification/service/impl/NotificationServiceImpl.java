@@ -744,7 +744,14 @@ public class NotificationServiceImpl implements NotificationService {
             return;
         }
 
-        updateRecipient(notificationId, SMS, recipient, statusPatch(SENT, null).put("messageId", messageId), null);
+        //updateRecipient(notificationId, SMS, recipient, statusPatch(SENT, null).put("messageId", messageId), null);
+        ObjectNode sentPatch = statusPatch(SENT, null).put("messageId", messageId);
+
+        if (smsSenderService.isSandbox()) {
+            sentPatch.put("sandbox", true);
+        }
+
+        updateRecipient(notificationId, SMS, recipient, sentPatch, null);
         log.info("SMS alert sent transactionId={}, recipient={}, sendMs={}",
                 event.transactionId(), recipient, elapsedMillis(startedAt));
         if (StringUtils.hasText(messageId)) {
@@ -843,9 +850,19 @@ public class NotificationServiceImpl implements NotificationService {
             return;
         }
 
+//        ObjectNode patch = statusPatch(SENT, null);
+//        if (SMS.equals(channel)) {
+//            patch.put("messageId", messageId);
+//        }
+
         ObjectNode patch = statusPatch(SENT, null);
+
         if (SMS.equals(channel)) {
             patch.put("messageId", messageId);
+
+            if (smsSenderService.isSandbox()) {
+                patch.put("sandbox", true);
+            }
         }
         updateRecipient(notificationId, channel, recipient, patch, null);
         log.info("Notification retry succeeded notificationId={}, channel={}, recipient={}, retryCount={}",
@@ -1008,7 +1025,13 @@ public class NotificationServiceImpl implements NotificationService {
         // expectedStatus = SENT: never overwrite an entry a retry changed meanwhile.
         if (result.delivered()) {
             updateRecipient(notificationId, SMS, recipient, statusPatch(DELIVERED, null), SENT);
-            log.info("SMS delivery confirmed by carrier notificationId={}, recipient={}", notificationId, recipient);
+            if (smsSenderService.isSandbox()) {
+                log.info("SANDBOX SMS delivery simulated as confirmed notificationId={}, recipient={}",
+                        notificationId, recipient);
+            } else {
+                log.info("SMS delivery confirmed by carrier notificationId={}, recipient={}",
+                        notificationId, recipient);
+            }
         } else if (result.failed()) {
             updateRecipient(notificationId, SMS, recipient, statusPatch(DELIVERY_FAILED, result.reason()), SENT);
             log.warn("SMS rejected by carrier notificationId={}, recipient={}, reason={}",

@@ -8,7 +8,9 @@ package com.se.frms.notification.dto;
  */
 public record SmsDeliveryStatus(String status, String reason) {
     public boolean delivered() {
-        return "DELIVRD".equalsIgnoreCase(status) || "DELIVERED".equalsIgnoreCase(status);
+        return "DELIVRD".equalsIgnoreCase(status)
+                || "DELIVERED".equalsIgnoreCase(status)
+                || "SANDBOX_DELIVERED".equalsIgnoreCase(status);
     }
 
     public boolean failed() {

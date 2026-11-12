@@ -16,4 +16,13 @@ public interface SmsSenderService {
      * not throw for a "still pending" result, only for a genuine call failure.
      */
     SmsDeliveryStatus checkDeliveryStatus(String messageId);
+
+    /**
+     * Indicates that this sender is a non-provider test implementation.  The
+     * notification record uses this only to label a simulated SMS; production
+     * senders retain the existing false value.
+     */
+    default boolean isSandbox() {
+        return false;
+    }
 }

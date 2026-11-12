@@ -20,8 +20,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
-
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 @Service
+@ConditionalOnProperty(
+        prefix = "notification.sms",
+        name = "mode",
+        havingValue = "production"
+)
 @RequiredArgsConstructor
 @Slf4j
 public class Msg24x7SmsSenderService implements SmsSenderService {
