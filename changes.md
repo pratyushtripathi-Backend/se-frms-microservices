@@ -6,7 +6,7 @@ with `phases.md`. Updated as each phase lands — not a historical log, a curren
 Git identity for this work: `Ananya Mishra <ananya.mishra@secureedge.in>` (set locally on this
 repo only). No commits made yet — everything below is still an uncommitted working-tree change.
 
-## Status: Phases 1-2 complete (of 8). Phases 3-8 not started.
+## Status: Phases 1-3 complete (of 8). Phases 4-8 not started.
 
 ## Files added
 
@@ -25,14 +25,26 @@ ai-service/
     │   │   └── RestClientConfig.java
     │   ├── controller/
     │   │   └── AiController.java
+    │   ├── dto/
+    │   │   ├── ChatRequest.java / ChatResponse.java
+    │   │   ├── DraftTemplateRequest.java / DraftTemplateResponse.java
+    │   │   ├── ExplainDecisionRequest.java / ExplainDecisionResponse.java
+    │   │   ├── NlToRuleRequest.java / NlToRuleResponse.java
+    │   │   ├── RiskScoreRequest.java / RiskScoreResponse.java
+    │   │   └── SummarizeTrendsRequest.java / SummarizeTrendsResponse.java
     │   ├── entity/
     │   │   └── AiAuditLog.java
     │   ├── exception/
-    │   │   └── ClaudeCallException.java
+    │   │   ├── ClaudeCallException.java
+    │   │   ├── FeatureDisabledException.java
+    │   │   └── GlobalExceptionHandler.java
     │   ├── filter/
     │   │   └── CorrelationIdFilter.java
     │   ├── repository/
     │   │   └── AiAuditLogRepository.java
+    │   ├── service/
+    │   │   ├── AiService.java
+    │   │   └── impl/AiServiceImpl.java
     │   └── util/
     │       └── PiiRedactor.java
     └── resources/
@@ -120,6 +132,44 @@ answer, follows this repo's existing convention of `${ENV_VAR:default}` placehol
 a secrets-manager integration), `ai.anthropic.model`, `ai.anthropic.max-tokens`, and the
 `frms.http.*` pool/timeout tuning properties `HttpClientConfig` reads.
 
+### `ai-service/src/main/java/com/se/frms/ai/dto/*` (new, 12 files)
+Request/response record pair per endpoint: `ExplainDecisionRequest/Response`,
+`SummarizeTrendsRequest/Response`, `DraftTemplateRequest/Response`, `NlToRuleRequest/Response`,
+and the two stubs' `RiskScoreRequest/Response`, `ChatRequest/Response`. Plain records with
+`jakarta.validation` annotations on the components that need them, no Lombok — matches
+`decision-service`'s `DecisionRequest`/`CaseResponse` style exactly.
+
+### `ai-service/src/main/java/com/se/frms/ai/exception/FeatureDisabledException.java` (new)
+Thrown by `riskScore()`/`chat()` when their feature flag is off.
+
+### `ai-service/src/main/java/com/se/frms/ai/exception/GlobalExceptionHandler.java` (new)
+`@RestControllerAdvice`, same shape as `decision-service`'s: validation failures → 400,
+`FeatureDisabledException` → 503, `ClaudeCallException` → 502, anything else → 500.
+
+### `ai-service/src/main/java/com/se/frms/ai/service/AiService.java` + `service/impl/AiServiceImpl.java` (new)
+One method per endpoint. The four real methods build a prompt (text block + `.formatted()`),
+redact it, call `ClaudeClient`, redact the response, write a best-effort audit-log row (a failed
+audit write logs a warning but never fails the actual AI response), and return it.
+`nl-to-rule` additionally parses the response text as JSON into a `Map` via Jackson's
+`ObjectMapper` (a Spring Boot auto-configured bean, no extra config needed) - a response Claude
+doesn't return as valid JSON surfaces as a `ClaudeCallException`. `riskScore()`/`chat()` just
+throw `FeatureDisabledException` when their flag is off (currently always, since both default to
+`false`).
+
+### `ai-service/src/main/java/com/se/frms/ai/client/ClaudeClient.java` (updated)
+Added a `getModel()` getter so `AiServiceImpl` can record which model answered each call in the
+audit log.
+
+### `ai-service/src/main/java/com/se/frms/ai/controller/AiController.java` (updated)
+Now has all 6 endpoints (`POST /explain-decision`, `/summarize-trends`, `/draft-template`,
+`/nl-to-rule`, `/risk-score`, `/chat`, all `@Valid @RequestBody`) alongside the existing
+`GET /health`.
+
+### `ai-service/src/main/resources/application.properties` (updated)
+Added `ai.features.risk-score.enabled=false` and `ai.features.chat.enabled=false` - the explicit
+feature-flag off switch the AI integration proposal calls for as its mitigation for "new
+microservice adds operational surface area."
+
 ## Files changed in other services
 
 None yet. Phases 4-7 (api-gateway, decision-service, notification-service, analytics-service)
@@ -137,8 +187,7 @@ against a `se_frms_ai_db` Postgres database (not created automatically) and expo
 
 ## Not yet touched (repo-wide)
 
-- `api-gateway/src/main/resources/application.yml` — no route for ai-service yet.
+- `api-gateway/src/main/resources/application.yml` — no route for ai-service yet, so it's not
+  reachable through the gateway (only directly on `localhost:8101`).
 - `decision-service`, `notification-service`, `analytics-service` — no changes yet.
-- No controller endpoints beyond `GET /health` — Phase 3 adds the 4 real + 2 stub endpoints.
 - Root `README.md`, `database/README.md` — not updated yet (Phase 8).
-- No commit made — all of the above is uncommitted working-tree state on `feature/ai-service`.
