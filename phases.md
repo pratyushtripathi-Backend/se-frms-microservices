@@ -29,7 +29,7 @@ anything leaves the service or gets logged), `entity/AiAuditLog.java` +
 controller endpoints beyond health — this phase is "the plumbing compiles and can talk to a DB
 and to Claude," not yet reachable from outside.
 
-## Phase 3 — the 4 real endpoints + 2 disabled stubs
+## Phase 3 — the 4 real endpoints + 2 disabled stubs ✅ done
 
 DTOs (`ExplainDecisionRequest/Response`, `SummarizeTrendsRequest/Response`,
 `DraftTemplateRequest/Response`, `NlToRuleRequest/Response`, plus stub
