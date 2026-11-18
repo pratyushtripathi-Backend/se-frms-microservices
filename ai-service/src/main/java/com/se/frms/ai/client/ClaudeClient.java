@@ -37,6 +37,11 @@ public class ClaudeClient {
         this.restClient = restClientBuilder.build();
     }
 
+    /** The configured model name, for callers that need to record it (e.g. the audit log). */
+    public String getModel() {
+        return model;
+    }
+
     /** Sends one user-turn prompt, returns the concatenated text of the response. */
     public String complete(String prompt) {
         if (apiKey == null || apiKey.isBlank()) {
