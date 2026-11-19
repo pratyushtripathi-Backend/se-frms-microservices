@@ -69,6 +69,12 @@ public class FallbackController {
         return unavailable("analytics-service");
     }
 
+    @GetMapping("/ai")
+    @PostMapping("/ai")
+    public ResponseEntity<Map<String, Object>> aiServiceFallback() {
+        return unavailable("ai-service");
+    }
+
     private ResponseEntity<Map<String, Object>> unavailable(String service) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
                 "status", 503,
