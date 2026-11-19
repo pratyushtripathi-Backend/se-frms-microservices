@@ -40,7 +40,7 @@ useful standalone (curl + `ANTHROPIC_API_KEY`), before touching any other servic
 `ai.features.risk-score.enabled=false` / `ai.features.chat.enabled=false` by default — see plan's
 Context section for why those two stay stubbed (no trained model, no in-repo chat consumer).
 
-## Phase 4 — api-gateway wiring
+## Phase 4 — api-gateway wiring ✅ done
 
 New route block in `api-gateway/src/main/resources/application.yml` (`uri: lb://ai-service`,
 `Path=/api/v1/ai/**`, redis `RequestRateLimiter`, `CircuitBreaker` + `Retry`,

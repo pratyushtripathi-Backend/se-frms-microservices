@@ -6,7 +6,7 @@ with `phases.md`. Updated as each phase lands — not a historical log, a curren
 Git identity for this work: `Ananya Mishra <ananya.mishra@secureedge.in>` (set locally on this
 repo only). No commits made yet — everything below is still an uncommitted working-tree change.
 
-## Status: Phases 1-3 complete (of 8). Phases 4-8 not started.
+## Status: Phases 1-4 complete (of 8). Phases 5-8 not started.
 
 ## Files added
 
@@ -172,8 +172,22 @@ microservice adds operational surface area."
 
 ## Files changed in other services
 
-None yet. Phases 4-7 (api-gateway, decision-service, notification-service, analytics-service)
-haven't started.
+### `api-gateway/src/main/resources/application.yml` (updated)
+New `ai-service` route block, same shape as `analytics-service`'s (redis `RequestRateLimiter`,
+`CircuitBreaker` + `Retry`, `AddRequestHeader=X-Gateway-Source, api-gateway`). Also added
+`resilience4j.circuitbreaker.instances.aiServiceCircuitBreaker` (smaller sliding window — 10
+calls, 5 minimum — and a longer `waitDurationInOpenState` of 20s than the other services' 10-15s,
+since Claude being slow/down isn't something that resolves itself as quickly as a Postgres blip)
+and `resilience4j.timelimiter.instances.aiServiceCircuitBreaker` at **25s** — comfortably above
+ai-service's own 20s client-side read timeout (`frms.http.read-timeout-ms=20000` in
+`HttpClientConfig`), correcting the ~10s I'd originally sketched in the plan before Phase 2's
+actual timeout value was settled.
+
+### `api-gateway/src/main/java/com/se/frms/gateway/controller/FallbackController.java` (updated)
+Added `aiServiceFallback()` mapped at `GET/POST /fallback/ai`, same `unavailable("ai-service")`
+pattern as every other fallback method.
+
+Phases 5-7 (decision-service, notification-service, analytics-service) haven't started.
 
 ## Verification status
 
