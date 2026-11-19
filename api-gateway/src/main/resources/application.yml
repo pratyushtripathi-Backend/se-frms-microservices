@@ -247,6 +247,34 @@ spring:
                   basedOnPreviousValue: false
             - AddRequestHeader=X-Gateway-Source, api-gateway
 
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/v1/ai/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 1000
+                redis-rate-limiter.burstCapacity: 2000
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: aiServiceCircuitBreaker
+                fallbackUri: forward:/fallback/ai
+            - name: Retry
+              args:
+                retries: 3
+                series:
+                  - SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1000ms
+                  factor: 2
+                  basedOnPreviousValue: false
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+
 eureka:
   client:
     register-with-eureka: true
@@ -336,6 +364,18 @@ resilience4j:
         waitDurationInOpenState: 10s
         permittedNumberOfCallsInHalfOpenState: 5
         automaticTransitionFromOpenToHalfOpenEnabled: true
+      aiServiceCircuitBreaker:
+        # Small instance (fewer calls than the CRUD services) and a longer
+        # open-state wait, since the Claude API being slow/down isn't
+        # something that resolves itself in 10s the way a Postgres blip does.
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
   timelimiter:
     instances:
       transactionServiceCircuitBreaker:
@@ -362,6 +402,11 @@ resilience4j:
         # Summary/rule-performance endpoints aggregate across rows, so a
         # slightly longer budget than a simple CRUD read.
         timeoutDuration: 6s
+      aiServiceCircuitBreaker:
+        # Comfortably above ai-service's own frms.http.read-timeout-ms=20000
+        # (HttpClientConfig) - an LLM completion is the slowest call any
+        # route in this gateway makes, so this gets the longest budget here.
+        timeoutDuration: 25s
 
 frms:
   security:
