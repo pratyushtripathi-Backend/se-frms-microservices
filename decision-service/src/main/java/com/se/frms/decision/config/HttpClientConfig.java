@@ -61,4 +61,42 @@ public class HttpClientConfig {
 
         return new HttpComponentsClientHttpRequestFactory(httpClient);
     }
+
+    /**
+     * Separate, smaller pool dedicated to ai-service calls, with a much
+     * longer read timeout than internalClientHttpRequestFactory's default
+     * 5s - an LLM completion has a materially longer tail latency than the
+     * scoring/transaction lookups' own Postgres reads, and reusing the
+     * shared 5s-timeout factory would make every AI narrative call fail.
+     */
+    @Bean(destroyMethod = "destroy")
+    public HttpComponentsClientHttpRequestFactory aiClientHttpRequestFactory(
+            @Value("${frms.ai.http.max-connections:20}") int maxConnections,
+            @Value("${frms.ai.http.max-connections-per-route:20}") int maxConnectionsPerRoute,
+            @Value("${frms.ai.http.connect-timeout-ms:3000}") long connectTimeoutMs,
+            @Value("${frms.ai.http.read-timeout-ms:25000}") long readTimeoutMs,
+            @Value("${frms.ai.http.pool-wait-timeout-ms:3000}") long poolWaitTimeoutMs
+    ) {
+        PoolingHttpClientConnectionManager connectionManager = PoolingHttpClientConnectionManagerBuilder.create()
+                .setMaxConnTotal(maxConnections)
+                .setMaxConnPerRoute(maxConnectionsPerRoute)
+                .setDefaultConnectionConfig(ConnectionConfig.custom()
+                        .setConnectTimeout(Timeout.ofMilliseconds(connectTimeoutMs))
+                        .setSocketTimeout(Timeout.ofMilliseconds(readTimeoutMs))
+                        .setValidateAfterInactivity(TimeValue.ofSeconds(2))
+                        .build())
+                .build();
+
+        CloseableHttpClient httpClient = HttpClients.custom()
+                .setConnectionManager(connectionManager)
+                .setDefaultRequestConfig(RequestConfig.custom()
+                        .setConnectionRequestTimeout(Timeout.ofMilliseconds(poolWaitTimeoutMs))
+                        .setResponseTimeout(Timeout.ofMilliseconds(readTimeoutMs))
+                        .build())
+                .evictIdleConnections(TimeValue.of(15, TimeUnit.SECONDS))
+                .evictExpiredConnections()
+                .build();
+
+        return new HttpComponentsClientHttpRequestFactory(httpClient);
+    }
 }
