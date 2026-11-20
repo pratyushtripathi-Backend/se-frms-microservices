@@ -20,6 +20,7 @@ public record CaseResponse(
         String finalDecision,
         String decisionReason,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        String aiNarrative
 ) {
 }
