@@ -10,6 +10,7 @@ import com.se.frms.analytics.dto.RulePerformanceResponse;
 import com.se.frms.analytics.service.AnalyticsService;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -124,5 +125,20 @@ public class AnalyticsController {
                 toDate
         );
         return ResponseEntity.ok(analyticsService.getFraudTrend(groupBy, fromDate, toDate));
+    }
+
+    @GetMapping("/ai-summary")
+    public ResponseEntity<Map<String, String>> getAiSummary(
+            @RequestParam(required = false, defaultValue = "month") String groupBy,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
+    ) {
+        log.info(
+                "GET /api/v1/analytics/ai-summary received groupBy={}, fromDate={}, toDate={}",
+                groupBy,
+                fromDate,
+                toDate
+        );
+        return ResponseEntity.ok(Map.of("summary", analyticsService.getAiSummary(groupBy, fromDate, toDate)));
     }
 }
