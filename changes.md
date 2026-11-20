@@ -6,7 +6,7 @@ with `phases.md`. Updated as each phase lands — not a historical log, a curren
 Git identity for this work: `Ananya Mishra <ananya.mishra@secureedge.in>` (set locally on this
 repo only). No commits made yet — everything below is still an uncommitted working-tree change.
 
-## Status: Phases 1-5 complete (of 8). Phases 6-8 not started.
+## Status: Phases 1-6 complete (of 8). Phases 7-8 not started.
 
 ## Files added
 
@@ -248,7 +248,48 @@ change and still doesn't after it — my new `aiNarrativeClient` constructor par
 broke it. Left as-is since resolving someone else's leftover merge conflict is outside this
 task's scope; flagging it so it doesn't get mistaken for something Phase 5 caused.
 
-Phase 6-7 (notification-service, analytics-service) haven't started.
+### `notification-service/src/main/java/com/se/frms/notification/config/RestTemplateConfig.java` (updated)
+Added a second `RestTemplate` bean, `aiRestTemplate`, with a much longer read timeout (25s vs.
+the existing `restTemplate` bean's 5s) dedicated to ai-service calls. Disambiguated from the
+existing bean the same way `internalClientHttpRequestFactory` already is in decision-service -
+by matching field/qualifier name, not `@Primary`.
+
+### `notification-service/src/main/java/com/se/frms/notification/dto/AiDraftTemplateRequest.java` + `AiDraftTemplateResponse.java` (new)
+`AiDraftTemplateRequest` mirrors ai-service's `DraftTemplateRequest` (`intent`, `channel`).
+`AiDraftTemplateResponse` is a local, forward-compatible projection of `DraftTemplateResponse`
+(single `draft` string, `@JsonIgnoreProperties(ignoreUnknown = true)`).
+
+### `notification-service/src/main/java/com/se/frms/notification/client/AiDraftTemplateClient.java` (new)
+Calls `POST {frms.ai.base-url}/api/v1/ai/draft-template` via the new `aiRestTemplate` bean
+(`@Qualifier("aiRestTemplate")`, since there are now two `RestTemplate` beans). Uses
+`RestTemplate`, not `RestClient` - this service's own existing outbound-call convention (see
+`MonolithAdminClient`/`Msg24x7SmsSenderService`), matched instead of introducing a different
+HTTP client just for this one call. Failures wrap into `IllegalStateException`, same style
+`MonolithAdminClient` already uses for its own failure path.
+
+### `notification-service/src/main/java/com/se/frms/notification/controller/NotificationTemplateController.java` (updated)
+Added `POST /api/v1/notification-templates/ai-draft`, gated by the exact same
+`X-INTERNAL-API-KEY` check (`isAuthorized`) every other endpoint on this controller already
+uses. Behind `frms.ai.draft-template.enabled` (default true) - returns 503 when off, 502 if
+ai-service itself fails. Returns the raw `{"draft": "..."}` text only - no DB write; the admin
+still saves the final version through the existing `createTemplate`/`updateTemplate` endpoints.
+
+### `notification-service/src/main/resources/application.properties` (updated)
+Added `frms.ai.base-url`, `frms.ai.path`, `frms.ai.draft-template.enabled=true`, and the
+`frms.ai.http.connect-timeout-ms`/`read-timeout-ms` properties the new `aiRestTemplate` bean
+reads.
+
+**Deviation from the plan's wording, documented:** the plan described the response as
+"EmailTemplateContent-shaped" (subject/body). ai-service's actual `/draft-template` contract
+returns one opaque free-text string, not structured fields - there's no reliable way to split
+that into subject/body without the AI returning them separately, so the real endpoint's shape
+was matched instead of forcing a fit that would require guessing.
+
+No api-gateway change was needed for this phase - the existing `notification-service` route
+(`Path=/api/v1/notifications/**,/api/v1/notification-templates/**`, added before this work
+started) already covers the new `/ai-draft` sub-path.
+
+Phase 7 (analytics-service) hasn't started.
 
 ## Verification status
 

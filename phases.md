@@ -59,13 +59,17 @@ separate transaction, since `getCases()` runs `@Transactional(readOnly = true)`)
 (`directAiRestClientBuilder`/`loadBalancedAiRestClientBuilder`) was added too — the shared
 internal HTTP client's 5s timeout would otherwise kill every AI narrative call.
 
-## Phase 6 — notification-service integration
+## Phase 6 — notification-service integration ✅ done
 
 `POST /api/v1/notification-templates/ai-draft` on `NotificationTemplateController` (gated by the
 same existing `X-INTERNAL-API-KEY` check as the rest of that controller), new
 `client/AiDraftTemplateClient.java` using `RestTemplate` (matches this service's own existing
 outbound-call convention), transient draft only — no DB write. Feature flag
-`frms.ai.draft-template.enabled=true`.
+`frms.ai.draft-template.enabled=true`. Returns the raw `{draft: "..."}` text rather than an
+`EmailTemplateContent`-shaped subject/body response — ai-service's actual `/draft-template`
+endpoint returns one free-text blob, not structured fields, so splitting it would mean guessing.
+No api-gateway change needed - the existing `notification-service` route already covers
+`/api/v1/notification-templates/**`.
 
 ## Phase 7 — analytics-service integration
 
