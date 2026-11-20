@@ -12,6 +12,7 @@ Basic Spring Boot project skeleton for the FRMS microservices architecture.
 - notification-service: consumes fraud events and manages notification history.
 - analytics-service: consumes fraud events for reporting, KPIs, trends, and rule performance.
 - audit-service: consumes relevant events and stores audit history.
+- ai-service: the only service that calls an LLM (Claude); explains decisions, summarizes trends, and drafts notification templates for the other services.
 
 ## Run
 
@@ -32,6 +33,7 @@ Default ports:
 - notification-service: 8096
 - analytics-service: 8097
 - audit-service: 8098
+- ai-service: 8101
 
 Start PostgreSQL, Kafka, and Redis where required before running dependent services.
 ## Service Registry Registration
@@ -54,6 +56,7 @@ Then start `api-gateway` and the individual services. The following services are
 - notification-service
 - analytics-service
 - audit-service
+- ai-service
 
 Open the Eureka dashboard at `http://localhost:8761` and verify each service appears under Applications.
 
