@@ -6,7 +6,7 @@ with `phases.md`. Updated as each phase lands — not a historical log, a curren
 Git identity for this work: `Ananya Mishra <ananya.mishra@secureedge.in>` (set locally on this
 repo only). No commits made yet — everything below is still an uncommitted working-tree change.
 
-## Status: Phases 1-6 complete (of 8). Phases 7-8 not started.
+## Status: All 8 phases complete.
 
 ## Files added
 
@@ -289,7 +289,48 @@ No api-gateway change was needed for this phase - the existing `notification-ser
 (`Path=/api/v1/notifications/**,/api/v1/notification-templates/**`, added before this work
 started) already covers the new `/ai-draft` sub-path.
 
-Phase 7 (analytics-service) hasn't started.
+### `analytics-service/src/main/java/com/se/frms/analytics/config/RestClientConfig.java` (new)
+A single `RestClient.Builder` bean with plain timeouts (`SimpleClientHttpRequestFactory`, no
+pooling) - this service's first outbound HTTP call ever (it's otherwise Kafka-consumer-only), and
+a low-volume, on-demand one, so the pooled-client complexity decision-service/notification-service
+needed wasn't worth adding here.
+
+### `analytics-service/src/main/java/com/se/frms/analytics/dto/AiTrendSummaryRequest.java` + `AiTrendSummaryResponse.java` (new)
+`AiTrendSummaryRequest` mirrors ai-service's `SummarizeTrendsRequest` (`fraudTrend`,
+`rulePerformance`, both `Map<String,Object>`). `AiTrendSummaryResponse` is a local,
+forward-compatible projection of `SummarizeTrendsResponse` (single `summary` string).
+
+### `analytics-service/src/main/java/com/se/frms/analytics/client/AiTrendSummaryClient.java` (new)
+Calls `POST {frms.ai.base-url}/api/v1/ai/summarize-trends`, passing this service's own
+already-computed `getFraudTrend()`/`getRulePerformance()` output. Failures become a
+`ResponseStatusException(BAD_GATEWAY)`, handled by this service's existing
+`GlobalExceptionHandler` - no new exception type needed, this service already catches
+`ResponseStatusException` generically.
+
+### `analytics-service/src/main/java/com/se/frms/analytics/service/AnalyticsService.java` + `service/impl/AnalyticsServiceImpl.java` (updated)
+Added `getAiSummary(groupBy, fromDate, toDate)`: throws `ResponseStatusException(SERVICE_UNAVAILABLE)`
+when `frms.ai.trend-summary.enabled=false`, otherwise calls the existing `getFraudTrend()` +
+`getRulePerformance(10)` and hands their output to `AiTrendSummaryClient`.
+
+### `analytics-service/src/main/java/com/se/frms/analytics/controller/AnalyticsController.java` (updated)
+Added `GET /api/v1/analytics/ai-summary?groupBy=&fromDate=&toDate=`, same param shape as the
+existing `getFraudTrend` endpoint, returning `{"summary": "..."}`.
+
+### `analytics-service/src/main/resources/application.properties` (updated)
+Added `frms.ai.base-url`, `frms.ai.path`, `frms.ai.trend-summary.enabled=true`, and the
+`frms.ai.http.*` timeout properties the new `RestClientConfig` bean reads.
+
+No api-gateway change was needed for this phase either - the existing `analytics-service` route
+(`Path=/api/v1/analytics/**`) already covers the new `/ai-summary` sub-path.
+
+### Root `README.md` (updated)
+Added an `ai-service` bullet to the services list (port 8101), and to the Eureka-client list
+further down.
+
+### `database/README.md` (updated)
+Added `se_frms_ai_db` to the per-service database list.
+
+## All 8 phases are now complete.
 
 ## Verification status
 
@@ -303,7 +344,7 @@ against a `se_frms_ai_db` Postgres database (not created automatically) and expo
 
 ## Not yet touched (repo-wide)
 
-- `api-gateway/src/main/resources/application.yml` — no route for ai-service yet, so it's not
-  reachable through the gateway (only directly on `localhost:8101`).
-- `decision-service`, `notification-service`, `analytics-service` — no changes yet.
-- Root `README.md`, `database/README.md` — not updated yet (Phase 8).
+Nothing left in scope. All 8 phases (service skeleton, Claude plumbing, real endpoints,
+api-gateway wiring, decision-service/notification-service/analytics-service integrations, docs)
+are complete. Explicitly out of scope per the plan: `/ai/risk-score` real model, `/ai/chat` real
+tool-calling, `se_frms_backend`/`se_frms_frontend` changes, pgvector/fuzzy blacklist matching.

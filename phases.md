@@ -71,19 +71,22 @@ endpoint returns one free-text blob, not structured fields, so splitting it woul
 No api-gateway change needed - the existing `notification-service` route already covers
 `/api/v1/notification-templates/**`.
 
-## Phase 7 — analytics-service integration
+## Phase 7 — analytics-service integration ✅ done
 
 `GET /api/v1/analytics/ai-summary` on `AnalyticsController` (same param shape as the existing
 `getFraudTrend`), new minimal `config/RestClientConfig.java` + `client/AiTrendSummaryClient.java`
 (analytics-service currently has neither — it's Kafka-consumer-only). On-demand, no new
 scheduler/entity (deviates from the proposal's weekly-cron design to match this service's actual
-on-demand convention). Feature flag `frms.ai.trend-summary.enabled=true`.
+on-demand convention). Feature flag `frms.ai.trend-summary.enabled=true`. No api-gateway change
+needed — the existing `analytics-service` route already covers `/api/v1/analytics/**`.
 
-## Phase 8 — docs
+## Phase 8 — docs ✅ done
 
-One-line additions to root `README.md` (ai-service bullet, port 8101) and `database/README.md`
-(`se_frms_ai_db`). Not a full rewrite of either (both have pre-existing staleness re:
-`auth-service`/`api-gateway` that isn't this task's to fix).
+One-line additions to root `README.md` (ai-service bullet, port 8101, Eureka-client list) and
+`database/README.md` (`se_frms_ai_db`). Not a full rewrite of either (both have pre-existing
+staleness re: `auth-service`/`api-gateway` that isn't this task's to fix).
+
+## All 8 phases complete.
 
 ## Explicitly out of scope (all phases)
 
