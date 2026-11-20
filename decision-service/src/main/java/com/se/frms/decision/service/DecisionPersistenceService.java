@@ -139,6 +139,30 @@ public class DecisionPersistenceService {
         return decisionRepository.save(decision).getId();
     }
 
+    /**
+     * Caches a freshly-generated AI narrative on the decision row, so the
+     * next getCases() page reuses it instead of calling ai-service again.
+     * Runs in its own transaction via transactionTemplate (same object
+     * saveDecision() reuses) because the caller, mapToCaseResponse(), runs
+     * inside getCases()'s @Transactional(readOnly = true) - a read-only
+     * transaction can't write through decisionRepository.save() directly.
+     * Best-effort: a failure here only means the narrative gets regenerated
+     * on the next page load, not that the case-management list breaks.
+     */
+    public void saveAiNarrative(UUID decisionId, String narrative) {
+        try {
+            transactionTemplate.execute(status -> {
+                decisionRepository.findById(decisionId).ifPresent(decision -> {
+                    decision.setAiNarrative(narrative);
+                    decisionRepository.save(decision);
+                });
+                return null;
+            });
+        } catch (RuntimeException ex) {
+            log.warn("Failed to cache AI narrative for decisionId={}: {}", decisionId, ex.getMessage());
+        }
+    }
+
     @PreDestroy
     void shutdown() {
         retryScheduler.shutdownNow();
