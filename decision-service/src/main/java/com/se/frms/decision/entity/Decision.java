@@ -38,6 +38,12 @@ public class Decision {
     @Column(name = "decision_reason", length = 500)
     private String decisionReason;
 
+    // AI-generated plain-English narrative (ai-service), generated on first
+    // request and cached here so it's not regenerated on every page load.
+    // Nullable: empty until the first case-management request for this row.
+    @Column(name = "ai_narrative", columnDefinition = "TEXT")
+    private String aiNarrative;
+
     @Column(nullable = false)
     private Boolean status;
 
