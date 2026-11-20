@@ -24,4 +24,24 @@ public class RestTemplateConfig {
         requestFactory.setReadTimeout(readTimeoutMs);
         return new RestTemplate(requestFactory);
     }
+
+    /**
+     * Separate RestTemplate, dedicated to ai-service calls, with a much
+     * longer read timeout than the one above - an LLM completion takes
+     * materially longer than the MSG24x7/monolith calls that bean is sized
+     * for, and reusing its 5s timeout would fail every AI draft request.
+     * Field name "aiRestTemplate" on AiDraftTemplateClient resolves to this
+     * bean by name, the same way "restTemplate" above already resolves
+     * unambiguously for MonolithAdminClient and Msg24x7SmsSenderService.
+     */
+    @Bean
+    public RestTemplate aiRestTemplate(
+            @Value("${frms.ai.http.connect-timeout-ms:3000}") int connectTimeoutMs,
+            @Value("${frms.ai.http.read-timeout-ms:25000}") int readTimeoutMs
+    ) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(connectTimeoutMs);
+        requestFactory.setReadTimeout(readTimeoutMs);
+        return new RestTemplate(requestFactory);
+    }
 }
