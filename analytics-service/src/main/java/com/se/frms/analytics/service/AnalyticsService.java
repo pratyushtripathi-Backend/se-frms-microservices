@@ -46,4 +46,11 @@ public interface AnalyticsService {
     List<ChannelCountResponse> getTransactionsByChannel(LocalDate fromDate, LocalDate toDate);
 
     List<FraudTrendResponse> getFraudTrend(String groupBy, LocalDate fromDate, LocalDate toDate);
+
+    /**
+     * Plain-English summary of the fraud-trend and rule-performance numbers
+     * above, written by ai-service. On-demand (no cache, no scheduler) -
+     * this service computes everything else live per request too.
+     */
+    String getAiSummary(String groupBy, LocalDate fromDate, LocalDate toDate);
 }

@@ -1,4 +1,5 @@
 package com.se.frms.analytics.service.impl;
+import com.se.frms.analytics.client.AiTrendSummaryClient;
 import com.se.frms.analytics.dto.AnalyticsSummaryResponse;
 import com.se.frms.analytics.dto.ChannelCountResponse;
 import com.se.frms.analytics.dto.DailyTransactionVolumeResponse;
@@ -23,6 +24,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -54,6 +56,13 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     private static final String GROUP_BY_YEAR = "year";
 
     private final FraudAnalyticsRepository fraudAnalyticsRepository;
+    private final AiTrendSummaryClient aiTrendSummaryClient;
+
+    // Explicit off switch (per the AI integration proposal's own risk
+    // mitigation) - set to false to stop calling ai-service without any
+    // code change.
+    @Value("${frms.ai.trend-summary.enabled:true}")
+    private boolean aiTrendSummaryEnabled;
 
     @Override
     @Transactional
@@ -268,6 +277,17 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         return rows.stream()
                 .map(row -> new FraudTrendResponse(row.getPeriod(), row.getFraudAlertCount(), row.getBlockedCount()))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String getAiSummary(String groupBy, LocalDate fromDate, LocalDate toDate) {
+        if (!aiTrendSummaryEnabled) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI trend summary is currently disabled");
+        }
+        List<FraudTrendResponse> fraudTrend = getFraudTrend(groupBy, fromDate, toDate);
+        List<RulePerformanceResponse> rulePerformance = getRulePerformance(10);
+        return aiTrendSummaryClient.summarizeTrends(fraudTrend, rulePerformance);
     }
 
     private String normalizeGroupBy(String groupBy) {
