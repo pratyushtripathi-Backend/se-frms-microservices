@@ -6,7 +6,7 @@ with `phases.md`. Updated as each phase lands — not a historical log, a curren
 Git identity for this work: `Ananya Mishra <ananya.mishra@secureedge.in>` (set locally on this
 repo only). No commits made yet — everything below is still an uncommitted working-tree change.
 
-## Status: Phases 1-4 complete (of 8). Phases 5-8 not started.
+## Status: Phases 1-5 complete (of 8). Phases 6-8 not started.
 
 ## Files added
 
@@ -187,7 +187,68 @@ actual timeout value was settled.
 Added `aiServiceFallback()` mapped at `GET/POST /fallback/ai`, same `unavailable("ai-service")`
 pattern as every other fallback method.
 
-Phases 5-7 (decision-service, notification-service, analytics-service) haven't started.
+### `decision-service/src/main/java/com/se/frms/decision/entity/Decision.java` (updated)
+Added `aiNarrative` (`@Column(name = "ai_narrative", columnDefinition = "TEXT")`, nullable) —
+cached AI-generated narrative, populated on first case-management request for that row.
+
+### `database/alter_decision_service_add_ai_narrative.sql` (new)
+`ALTER TABLE se_frms_decision ADD COLUMN IF NOT EXISTS ai_narrative TEXT;`
+
+### `decision-service/src/main/java/com/se/frms/decision/dto/CaseResponse.java` (updated)
+Added `String aiNarrative` as the last record component.
+
+### `decision-service/src/main/java/com/se/frms/decision/dto/AiNarrativeRequest.java` + `AiNarrativeResponse.java` (new)
+Outbound/inbound shape for ai-service's `/explain-decision` endpoint — `AiNarrativeRequest`
+matches `ExplainDecisionRequest` field-for-field; `AiNarrativeResponse` is a local, forward-
+compatible projection of `ExplainDecisionResponse` (`@JsonIgnoreProperties(ignoreUnknown = true)`),
+same convention as `ScoringLookupResponse`/`TransactionLookupResponse`.
+
+### `decision-service/src/main/java/com/se/frms/decision/client/AiNarrativeClient.java` (new)
+Calls `POST {frms.ai.base-url}/api/v1/ai/explain-decision`. Same direct-vs-load-balanced
+`RestClient.Builder` split as `ScoringLookupClient`, but on its own dedicated pair
+(`directAiRestClientBuilder`/`loadBalancedAiRestClientBuilder`) sized with a much longer read
+timeout — reusing the shared internal client's 5s timeout would fail every call, since an LLM
+completion routinely takes longer than that.
+
+### `decision-service/src/main/java/com/se/frms/decision/config/HttpClientConfig.java` (updated)
+Added a second pooled `HttpComponentsClientHttpRequestFactory` bean (`aiClientHttpRequestFactory`),
+smaller pool (20 connections) and a 25s read timeout by default — comfortably above ai-service's
+own 20s Claude-call timeout, same "above the thing it's calling" reasoning used for the
+api-gateway's `aiServiceCircuitBreaker` timelimiter in Phase 4.
+
+### `decision-service/src/main/java/com/se/frms/decision/config/RestClientConfig.java` (updated)
+Added `directAiRestClientBuilder`/`loadBalancedAiRestClientBuilder` beans on the new factory, and
+a new `aiClientHttpRequestFactory` constructor-injected field (resolved by field-name match, same
+existing pattern as `internalClientHttpRequestFactory` noted in this file's own comments).
+
+### `decision-service/src/main/java/com/se/frms/decision/service/DecisionPersistenceService.java` (updated)
+Added `saveAiNarrative(decisionId, narrative)` — reuses the same `transactionTemplate` instance
+`saveDecision()` already has, so it runs in its own transaction outside `getCases()`'s
+`@Transactional(readOnly = true)`. Best-effort: a failed write is logged and swallowed, since a
+missed cache write just means the narrative gets regenerated next page load, not that anything
+breaks.
+
+### `decision-service/src/main/java/com/se/frms/decision/service/impl/DecisionServiceImpl.java` (updated)
+`mapToCaseResponse()` now also resolves an `aiNarrative`: reuses `decision.getAiNarrative()` if
+already cached, otherwise (when `frms.ai.narrative.enabled=true`, default on) calls
+`AiNarrativeClient.explainDecision()` best-effort — same try/catch-and-log-warn pattern as the
+existing scoring/transaction lookups, so a down or slow ai-service never breaks the case list —
+and caches a successful result via `saveAiNarrative()`.
+
+### `decision-service/src/main/resources/application.properties` (updated)
+Added `frms.ai.base-url`, `frms.ai.path`, `frms.ai.narrative.enabled=true`, and the
+`frms.ai.http.*` pool/timeout properties `HttpClientConfig`'s new bean reads.
+
+**Noted, not fixed (pre-existing, unrelated to this work):**
+`decision-service/src/test/java/.../DecisionServiceImplTest.java` already has unresolved git
+merge-conflict markers (`<<<<<<< Updated upstream` / `=======` / `>>>>>>> Stashed changes`) sitting
+in it on `dev`, and its hand-built `DecisionServiceImpl` constructor call was already missing the
+`caseLookupExecutor` argument before this phase touched the file. It didn't compile before this
+change and still doesn't after it — my new `aiNarrativeClient` constructor parameter isn't what
+broke it. Left as-is since resolving someone else's leftover merge conflict is outside this
+task's scope; flagging it so it doesn't get mistaken for something Phase 5 caused.
+
+Phase 6-7 (notification-service, analytics-service) haven't started.
 
 ## Verification status
 

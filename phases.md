@@ -48,14 +48,16 @@ New route block in `api-gateway/src/main/resources/application.yml` (`uri: lb://
 `.timelimiter` instances for `aiServiceCircuitBreaker` (longer timeout than other routes — LLM
 calls have a longer tail latency), and an `aiServiceFallback()` addition to `FallbackController.java`.
 
-## Phase 5 — decision-service integration
+## Phase 5 — decision-service integration ✅ done
 
 `ai_narrative` TEXT column on `Decision` entity + `database/alter_decision_service_add_ai_narrative.sql`,
 `aiNarrative` field on `CaseResponse`, new `client/AiNarrativeClient.java` (same shape as
 `ScoringLookupClient`), wiring into `DecisionServiceImpl.mapToCaseResponse()` (best-effort, cached
 after first generation via a new narrow `DecisionPersistenceService.saveAiNarrative()` write — a
 separate transaction, since `getCases()` runs `@Transactional(readOnly = true)`), feature flag
-`frms.ai.narrative.enabled=true`.
+`frms.ai.narrative.enabled=true`. Its own dedicated, longer-timeout `RestClient` pair
+(`directAiRestClientBuilder`/`loadBalancedAiRestClientBuilder`) was added too — the shared
+internal HTTP client's 5s timeout would otherwise kill every AI narrative call.
 
 ## Phase 6 — notification-service integration
 
