@@ -15,6 +15,9 @@ public class RestClientConfig {
     private final CorrelationIdRequestInterceptor correlationIdRequestInterceptor;
     // Shared pooled HTTP client with timeouts - see HttpClientConfig.
     private final ClientHttpRequestFactory internalClientHttpRequestFactory;
+    // Separate pooled client with a much longer read timeout, dedicated to
+    // ai-service calls - see HttpClientConfig.aiClientHttpRequestFactory.
+    private final ClientHttpRequestFactory aiClientHttpRequestFactory;
 
     // Existing bean, left exactly as-is (no interceptor, no @LoadBalanced) so
     // RuleCacheDecisionPolicyClient's literal http://localhost:8093 call
@@ -47,6 +50,24 @@ public class RestClientConfig {
     public RestClient.Builder loadBalancedLookupRestClientBuilder() {
         return RestClient.builder()
                 .requestFactory(internalClientHttpRequestFactory)
+                .requestInterceptor(correlationIdRequestInterceptor);
+    }
+
+    // AiNarrativeClient's pair, same direct-vs-load-balanced split as the
+    // two beans above, but on aiClientHttpRequestFactory's much longer
+    // read timeout instead of the shared internal one.
+    @Bean
+    public RestClient.Builder directAiRestClientBuilder() {
+        return RestClient.builder()
+                .requestFactory(aiClientHttpRequestFactory)
+                .requestInterceptor(correlationIdRequestInterceptor);
+    }
+
+    @Bean
+    @LoadBalanced
+    public RestClient.Builder loadBalancedAiRestClientBuilder() {
+        return RestClient.builder()
+                .requestFactory(aiClientHttpRequestFactory)
                 .requestInterceptor(correlationIdRequestInterceptor);
     }
 }
