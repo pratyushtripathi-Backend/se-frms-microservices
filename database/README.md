@@ -9,5 +9,6 @@ Create one PostgreSQL database per service. Keep databases isolated and do not c
 - se_frms_notification_db
 - se_frms_analytics_db
 - se_frms_audit_db
+- se_frms_ai_db
 
 The fraud-engine-service has no database in the initial skeleton.
