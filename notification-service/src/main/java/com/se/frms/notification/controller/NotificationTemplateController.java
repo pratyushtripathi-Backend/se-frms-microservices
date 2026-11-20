@@ -1,5 +1,7 @@
 package com.se.frms.notification.controller;
 
+import com.se.frms.notification.client.AiDraftTemplateClient;
+import com.se.frms.notification.dto.AiDraftTemplateRequest;
 import com.se.frms.notification.dto.CreateNotificationTemplateRequest;
 import com.se.frms.notification.dto.NotificationTemplateResponse;
 import com.se.frms.notification.dto.UpdateNotificationTemplateRequest;
@@ -32,9 +34,16 @@ public class NotificationTemplateController {
     private static final String INTERNAL_API_KEY_HEADER = "X-INTERNAL-API-KEY";
 
     private final NotificationTemplateManagementService notificationTemplateManagementService;
+    private final AiDraftTemplateClient aiDraftTemplateClient;
 
     @org.springframework.beans.factory.annotation.Value("${notification.monolith.internal-api-key}")
     private String internalApiKey;
+
+    // Explicit off switch (per the AI integration proposal's own risk
+    // mitigation) - set to false to stop calling ai-service without any
+    // code change.
+    @org.springframework.beans.factory.annotation.Value("${frms.ai.draft-template.enabled:true}")
+    private boolean aiDraftTemplateEnabled;
 
     @GetMapping
     public ResponseEntity<?> getTemplates(
@@ -111,6 +120,26 @@ public class NotificationTemplateController {
                 "message", "Notification template cache refreshed successfully",
                 "templateCount", templateCount
         ));
+    }
+
+    @PostMapping("/ai-draft")
+    public ResponseEntity<?> aiDraftTemplate(
+            @Valid @RequestBody AiDraftTemplateRequest request,
+            @RequestHeader(name = INTERNAL_API_KEY_HEADER, required = false) String providedApiKey) {
+        if (!isAuthorized(providedApiKey)) {
+            return forbidden();
+        }
+        if (!aiDraftTemplateEnabled) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message", "AI-assisted drafting is currently disabled"));
+        }
+        try {
+            String draft = aiDraftTemplateClient.draftTemplate(request.intent(), request.channel());
+            return ResponseEntity.ok(Map.of("draft", draft));
+        } catch (IllegalStateException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("message", "ai-service is currently unavailable"));
+        }
     }
 
     private boolean isAuthorized(String providedApiKey) {
