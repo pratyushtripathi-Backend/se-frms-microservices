@@ -1,6 +1,7 @@
 package com.se.frms.decision.service.impl;
 
 import com.se.frms.decision.cache.DecisionPolicyCache;
+import com.se.frms.decision.client.AiNarrativeClient;
 import com.se.frms.decision.client.ScoringLookupClient;
 import com.se.frms.decision.client.TransactionLookupClient;
 import com.se.frms.decision.config.CaseLookupExecutor;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -53,8 +55,15 @@ public class DecisionServiceImpl implements DecisionService {
     private final DecisionPersistenceService decisionPersistenceService;
     private final ScoringLookupClient scoringLookupClient;
     private final TransactionLookupClient transactionLookupClient;
+    private final AiNarrativeClient aiNarrativeClient;
     private final DecisionReviewedEventProducer decisionReviewedEventProducer;
     private final CaseLookupExecutor caseLookupExecutor;
+
+    // Explicit off switch (per the AI integration proposal's own risk
+    // mitigation) - set to false to stop calling ai-service from the
+    // case-management list without any code change.
+    @Value("${frms.ai.narrative.enabled:true}")
+    private boolean aiNarrativeEnabled;
 
     @Override
     public DecisionResponse process(DecisionRequest request) {
@@ -242,6 +251,8 @@ public class DecisionServiceImpl implements DecisionService {
                     decision.getId(), decision.getTransactionId());
         }
 
+        String aiNarrative = resolveAiNarrative(decision, matchedRules, amount, mode);
+
         return new CaseResponse(
                 decision.getId(),
                 decision.getTransactionId(),
@@ -252,8 +263,38 @@ public class DecisionServiceImpl implements DecisionService {
                 decision.getFinalDecision(),
                 decision.getDecisionReason(),
                 decision.getCreatedAt(),
-                decision.getUpdatedAt()
+                decision.getUpdatedAt(),
+                aiNarrative
         );
+    }
+
+    private String resolveAiNarrative(
+            Decision decision,
+            List<ScoringLookupResponse.MatchedRuleInfo> matchedRules,
+            java.math.BigDecimal amount,
+            String mode
+    ) {
+        if (decision.getAiNarrative() != null && !decision.getAiNarrative().isBlank()) {
+            return decision.getAiNarrative();
+        }
+        if (!aiNarrativeEnabled) {
+            return null;
+        }
+        // Best-effort, same as the scoring/transaction lookups above: a
+        // down or slow ai-service must never break the case list itself.
+        try {
+            String narrative = aiNarrativeClient.explainDecision(
+                    decision.getId(), matchedRules, amount, mode,
+                    decision.getTotalRiskScore(), decision.getFinalDecision()
+            );
+            if (narrative != null && !narrative.isBlank()) {
+                decisionPersistenceService.saveAiNarrative(decision.getId(), narrative);
+            }
+            return narrative;
+        } catch (ExternalServiceException ex) {
+            log.warn("AI narrative unavailable for decisionId={}", decision.getId());
+            return null;
+        }
     }
 
     private String resolveDecision(Integer totalRiskScore, DecisionPolicyResponse activePolicy) {
