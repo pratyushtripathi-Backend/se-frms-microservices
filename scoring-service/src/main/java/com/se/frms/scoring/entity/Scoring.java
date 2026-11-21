@@ -40,6 +40,15 @@ public class Scoring {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    // Filled in later, asynchronously, by the AI shadow-scoring path (frms.ai.risk-score.enabled) -
+    // null until that call returns, which happens well after this row and the rule-based response
+    // already exist. Never read by decision-service; evaluation/comparison data only.
+    @Column(name = "ai_risk_score")
+    private Double aiRiskScore;
+
+    @Column(name = "ai_reasoning", columnDefinition = "TEXT")
+    private String aiReasoning;
+
     @PrePersist
     public void prePersist() {
         LocalDateTime now = LocalDateTime.now();
