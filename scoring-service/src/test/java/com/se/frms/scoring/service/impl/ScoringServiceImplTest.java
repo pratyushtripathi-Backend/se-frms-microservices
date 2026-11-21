@@ -8,6 +8,7 @@ import com.se.frms.scoring.dto.ScoringResponse;
 import com.se.frms.scoring.evaluator.RuleEvaluator;
 import com.se.frms.scoring.repository.MatchedRuleRepository;
 import com.se.frms.scoring.repository.ScoringRepository;
+import com.se.frms.scoring.service.AiScoringAsyncService;
 import com.se.frms.scoring.service.ScoringPersistenceService;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,9 @@ class ScoringServiceImplTest {
     @Mock
     private ScoringPersistenceService scoringPersistenceService;
 
+    @Mock
+    private AiScoringAsyncService aiScoringAsyncService;
+
     private final RuleEvaluator ruleEvaluator = new RuleEvaluator();
 
     @InjectMocks
@@ -37,7 +41,7 @@ class ScoringServiceImplTest {
 
     @Test
     void shouldCalculateTotalRiskScoreFromMatchedRules() {
-        scoringService = new ScoringServiceImpl(scoringRepository, matchedRuleRepository, scoringPersistenceService, ruleEvaluator);
+        scoringService = new ScoringServiceImpl(scoringRepository, matchedRuleRepository, scoringPersistenceService, ruleEvaluator, aiScoringAsyncService);
 
         UUID transactionId = UUID.randomUUID();
         ScoringResponse response = scoringService.process(new ScoringRequest(
