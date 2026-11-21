@@ -12,6 +12,7 @@ import com.se.frms.scoring.evaluator.RuleEvaluator;
 import com.se.frms.scoring.exception.ScoringNotFoundException;
 import com.se.frms.scoring.repository.MatchedRuleRepository;
 import com.se.frms.scoring.repository.ScoringRepository;
+import com.se.frms.scoring.service.AiScoringAsyncService;
 import com.se.frms.scoring.service.ScoringPersistenceService;
 import com.se.frms.scoring.service.ScoringService;
 import jakarta.persistence.criteria.Predicate;
@@ -41,6 +42,7 @@ public class ScoringServiceImpl implements ScoringService {
     private final MatchedRuleRepository matchedRuleRepository;
     private final ScoringPersistenceService scoringPersistenceService;
     private final RuleEvaluator ruleEvaluator;
+    private final AiScoringAsyncService aiScoringAsyncService;
 
     @Override
     public ScoringResponse process(ScoringRequest request) {
@@ -79,6 +81,11 @@ public class ScoringServiceImpl implements ScoringService {
                 matchedResults
         );
 
+        // Fire-and-forget: runs on its own bounded pool, never awaited here. The response below
+        // is built and returned with whatever the rule engine already produced, unaffected by
+        // this call's existence, speed, or failure - see AiScoringAsyncService.
+        aiScoringAsyncService.scoreAsync(scoringId, request.transactionId(), request.transactionData());
+
         ScoringResponse response = new ScoringResponse(
                 scoringId,
                 request.transactionId(),
@@ -93,7 +100,10 @@ public class ScoringServiceImpl implements ScoringService {
                         )
                         .toList(),
 
-                buildTriggeredRules(matchedResults)
+                buildTriggeredRules(matchedResults),
+                null,
+                null,
+                null
         );
 
         log.info(
@@ -198,8 +208,23 @@ public class ScoringServiceImpl implements ScoringService {
                 scoring.getTransactionId(),
                 scoring.getTotalRiskScore(),
                 matchedRuleResponses,
-                buildTriggeredRulesFromMatchedRule(matchedRule)
+                buildTriggeredRulesFromMatchedRule(matchedRule),
+                scoring.getAiRiskScore(),
+                combinedRiskScore(scoring.getTotalRiskScore(), scoring.getAiRiskScore()),
+                scoring.getAiReasoning()
         );
+    }
+
+    /**
+     * Unweighted rule + AI sum, for comparing against real outcomes - null (not computed) until
+     * the async AI call has landed, which is independent of and later than this row's own
+     * creation. Never used by decision-service; see AiScoringAsyncService.
+     */
+    private Integer combinedRiskScore(Integer totalRiskScore, Double aiRiskScore) {
+        if (totalRiskScore == null || aiRiskScore == null) {
+            return null;
+        }
+        return totalRiskScore + (int) Math.round(aiRiskScore);
     }
 
     /**
