@@ -100,13 +100,35 @@ public class AiServiceImpl implements AiService {
         }
     }
 
+    /**
+     * Prompt-based score for evaluation only. Not the trained gradient-boosted model the
+     * proposal's Phase 3 specifies for a production blend into totalRiskScore - this exists so
+     * the quality of an LLM-judged score can be compared against real outcomes before deciding
+     * whether building that model is worth it.
+     */
     @Override
     public RiskScoreResponse riskScore(RiskScoreRequest request) {
         if (!riskScoreEnabled) {
             throw new FeatureDisabledException(
                     "AI risk-score is disabled - no trained model is deployed yet (ai.features.risk-score.enabled=false)");
         }
-        throw new FeatureDisabledException("AI risk-score is not implemented yet");
+        String prompt = """
+                Score the fraud risk of this transaction from 0 to 100, where 0 is certainly \
+                legitimate and 100 is certainly fraudulent. Output a JSON object with exactly \
+                these two fields: "score" (a number 0-100) and "reasoning" (one or two plain- \
+                English sentences). Output only the raw JSON object, nothing else - no markdown, \
+                no preamble.
+                Transaction features: %s
+                """.formatted(toJson(request.features()));
+        String text = runPrompt("risk-score", prompt);
+        try {
+            Map<String, Object> parsed = objectMapper.readValue(text, Map.class);
+            Double score = ((Number) parsed.get("score")).doubleValue();
+            String reasoning = (String) parsed.get("reasoning");
+            return new RiskScoreResponse(score, reasoning);
+        } catch (Exception ex) {
+            throw new ClaudeCallException("Claude did not return a parseable risk-score JSON object", ex);
+        }
     }
 
     @Override
