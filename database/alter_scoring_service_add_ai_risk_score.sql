@@ -1,0 +1,2 @@
+ALTER TABLE se_frms_scoring ADD COLUMN IF NOT EXISTS ai_risk_score DOUBLE PRECISION;
+ALTER TABLE se_frms_scoring ADD COLUMN IF NOT EXISTS ai_reasoning TEXT;
