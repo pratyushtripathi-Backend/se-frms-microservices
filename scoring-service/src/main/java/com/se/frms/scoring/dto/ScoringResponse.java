@@ -9,6 +9,12 @@ public record ScoringResponse(
         UUID transactionId,
         Integer totalRiskScore,
         List<MatchedRuleResponse> matchedRules,
-        Map<String, Object> triggeredRules
+        Map<String, Object> triggeredRules,
+        // Evaluation-only AI shadow score - null until the async call completes (seconds after
+        // this response, or any response that read this row before then, was returned).
+        // Never used for ALLOW/REVIEW/BLOCK; see AiScoringAsyncService.
+        Double aiRiskScore,
+        Integer combinedRiskScore,
+        String aiReasoning
 ) {
 }
