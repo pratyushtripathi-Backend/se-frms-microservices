@@ -1,4 +1,4 @@
 package com.se.frms.ai.dto;
 
-public record RiskScoreResponse(Double score) {
+public record RiskScoreResponse(Double score, String reasoning) {
 }
