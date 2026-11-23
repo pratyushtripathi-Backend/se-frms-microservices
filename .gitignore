@@ -1,2 +1,17 @@
 **/target/
 **/logs/
+
+# Credentials - never committed, only ever set via environment variables
+.env
+.env.*
+*.pem
+*.key
+*credentials*
+*secrets*
+application-local.properties
+application-secrets.properties
+
+# Local working notes, not project documentation
+phases.md
+changes.md
+LOCAL_RUN_GUIDE.md
