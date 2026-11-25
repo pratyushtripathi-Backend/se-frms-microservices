@@ -135,9 +135,9 @@ public class AiServiceImpl implements AiService {
     public ChatResponse chat(ChatRequest request) {
         if (!chatEnabled) {
             throw new FeatureDisabledException(
-                    "AI chat is disabled - tool-calling is not implemented yet (ai.features.chat.enabled=false)");
+                    "AI chat is disabled (ai.features.chat.enabled=false)");
         }
-        throw new FeatureDisabledException("AI chat is not implemented yet");
+        return new ChatResponse(runPrompt("chat", request.message()));
     }
 
     private String runPrompt(String endpoint, String prompt) {
