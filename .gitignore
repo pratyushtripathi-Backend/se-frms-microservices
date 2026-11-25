@@ -15,3 +15,5 @@ application-secrets.properties
 phases.md
 changes.md
 LOCAL_RUN_GUIDE.md
+AI_RISK_SCORE_RND_REPORT.pdf
+scripts/build_ai_rnd_report.py
