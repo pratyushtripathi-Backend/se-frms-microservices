@@ -4,6 +4,7 @@
   <component name="MavenProjectsManager">
     <option name="originalFiles">
       <list>
+        <option value="$PROJECT_DIR$/ai-service/pom.xml" />
         <option value="$PROJECT_DIR$/fraud-engine-service/pom.xml" />
         <option value="$PROJECT_DIR$/rule-cache-service/pom.xml" />
         <option value="$PROJECT_DIR$/transaction-service/pom.xml" />
@@ -18,7 +19,7 @@
       </list>
     </option>
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="ms-17 (3)" project-jdk-type="JavaSDK">
+  <component name="ProjectRootManager" version="2" project-jdk-name="17" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/out" />
   </component>
 </project>
