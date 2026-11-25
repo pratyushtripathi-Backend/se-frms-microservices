@@ -26,6 +26,5 @@ public interface AiService {
     /** Disabled by default - see ai.features.risk-score.enabled. */
     RiskScoreResponse riskScore(RiskScoreRequest request);
 
-    /** Disabled by default - see ai.features.chat.enabled. */
     ChatResponse chat(ChatRequest request);
 }
