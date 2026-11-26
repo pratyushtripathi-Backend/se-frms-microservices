@@ -4,14 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.se.frms.decision.cache.DecisionPolicyCache;
+import com.se.frms.decision.client.AiNarrativeClient;
 import com.se.frms.decision.client.ScoringLookupClient;
 import com.se.frms.decision.client.TransactionLookupClient;
+import com.se.frms.decision.config.CaseLookupExecutor;
+import com.se.frms.decision.dto.DecisionPolicyResponse;
 import com.se.frms.decision.dto.DecisionRequest;
 import com.se.frms.decision.dto.DecisionResponse;
 import com.se.frms.decision.producer.DecisionReviewedEventProducer;
 import com.se.frms.decision.repository.DecisionRepository;
 import com.se.frms.decision.service.DecisionPersistenceService;
-import java.lang.reflect.Field;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,31 +41,41 @@ class DecisionServiceImplTest {
     @Mock
     private TransactionLookupClient transactionLookupClient;
 
-<<<<<<< Updated upstream
-=======
+    @Mock
+    private AiNarrativeClient aiNarrativeClient;
+
     @Mock
     private DecisionReviewedEventProducer decisionReviewedEventProducer;
 
->>>>>>> Stashed changes
+    @Mock
+    private CaseLookupExecutor caseLookupExecutor;
+
     private DecisionServiceImpl decisionService;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         decisionService = new DecisionServiceImpl(
                 decisionRepository,
                 decisionPolicyCache,
                 decisionPersistenceService,
                 scoringLookupClient,
-<<<<<<< Updated upstream
-                transactionLookupClient
-=======
                 transactionLookupClient,
-                decisionReviewedEventProducer
->>>>>>> Stashed changes
+                aiNarrativeClient,
+                decisionReviewedEventProducer,
+                caseLookupExecutor
         );
-        setField("allowMaxScore", 39);
-        setField("reviewMaxScore", 69);
-        when(decisionPolicyCache.getActivePolicy()).thenReturn(null);
+        when(decisionPolicyCache.getActivePolicy()).thenReturn(activePolicy());
+    }
+
+    private DecisionPolicyResponse activePolicy() {
+        LocalDateTime now = LocalDateTime.now();
+        return new DecisionPolicyResponse(
+                UUID.randomUUID(), 1, "test policy",
+                0, 39,
+                40, 69,
+                70, 100,
+                true, "test", now, now
+        );
     }
 
     @Test
@@ -93,11 +106,5 @@ class DecisionServiceImplTest {
                 totalRiskScore,
                 Map.of()
         );
-    }
-
-    private void setField(String fieldName, Integer value) throws Exception {
-        Field field = DecisionServiceImpl.class.getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(decisionService, value);
     }
 }
