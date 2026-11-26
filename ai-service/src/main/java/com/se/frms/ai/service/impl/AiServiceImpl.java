@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.se.frms.ai.client.ClaudeClient;
 import com.se.frms.ai.dto.ChatRequest;
 import com.se.frms.ai.dto.ChatResponse;
+import com.se.frms.ai.dto.ChatTurn;
 import com.se.frms.ai.dto.DraftTemplateRequest;
 import com.se.frms.ai.dto.DraftTemplateResponse;
 import com.se.frms.ai.dto.ExplainDecisionRequest;
@@ -20,6 +21,7 @@ import com.se.frms.ai.exception.FeatureDisabledException;
 import com.se.frms.ai.repository.AiAuditLogRepository;
 import com.se.frms.ai.service.AiService;
 import com.se.frms.ai.util.PiiRedactor;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -137,7 +139,21 @@ public class AiServiceImpl implements AiService {
             throw new FeatureDisabledException(
                     "AI chat is disabled (ai.features.chat.enabled=false)");
         }
-        return new ChatResponse(runPrompt("chat", request.message()));
+        List<ChatTurn> redactedHistory = redactHistory(request.history());
+        String redactedMessage = piiRedactor.redact(request.message());
+        String responseText = claudeClient.completeConversation(redactedHistory, redactedMessage);
+        String redactedResponse = piiRedactor.redact(responseText);
+        logAudit("chat", redactedMessage, redactedResponse);
+        return new ChatResponse(redactedResponse);
+    }
+
+    private List<ChatTurn> redactHistory(List<ChatTurn> history) {
+        if (history == null) {
+            return List.of();
+        }
+        return history.stream()
+                .map(turn -> new ChatTurn(turn.role(), piiRedactor.redact(turn.content())))
+                .toList();
     }
 
     private String runPrompt(String endpoint, String prompt) {
