@@ -1,7 +1,9 @@
 package com.se.frms.ai.client;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.se.frms.ai.dto.ChatTurn;
 import com.se.frms.ai.exception.ClaudeCallException;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,11 +46,29 @@ public class ClaudeClient {
 
     /** Sends one user-turn prompt, returns the concatenated text of the response. */
     public String complete(String prompt) {
+        return send(List.of(new ClaudeMessage("user", prompt)));
+    }
+
+    /**
+     * Sends a multi-turn conversation (prior history, then the latest user message), returns
+     * the concatenated text of the response. {@code history} may be null or empty.
+     */
+    public String completeConversation(List<ChatTurn> history, String latestUserMessage) {
+        List<ClaudeMessage> messages = new ArrayList<>();
+        if (history != null) {
+            for (ChatTurn turn : history) {
+                messages.add(new ClaudeMessage(turn.role(), turn.content()));
+            }
+        }
+        messages.add(new ClaudeMessage("user", latestUserMessage));
+        return send(messages);
+    }
+
+    private String send(List<ClaudeMessage> messages) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new ClaudeCallException("ai.anthropic.api-key is not configured");
         }
-        ClaudeRequest request = new ClaudeRequest(model, maxTokens,
-                List.of(new ClaudeMessage("user", prompt)));
+        ClaudeRequest request = new ClaudeRequest(model, maxTokens, messages);
         try {
             ClaudeResponse response = restClient.post()
                     .uri(MESSAGES_PATH)
