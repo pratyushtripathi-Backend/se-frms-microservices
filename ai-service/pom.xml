@@ -93,4 +93,29 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <!-- JDK 23+ no longer runs annotation processors (Lombok) found on the classpath
+             unless -proc:full is passed. Without this, IDE builds on JDK 23+ fail with
+             "cannot find symbol: variable log". Only activates on JDK 23 and newer, so
+             JDK 17/21 builds are unchanged. -->
+        <profile>
+            <id>jdk23-plus-annotation-processing</id>
+            <activation>
+                <jdk>[23,)</jdk>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <compilerArgs combine.children="append">
+                                <arg>-proc:full</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
